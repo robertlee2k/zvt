@@ -72,8 +72,10 @@ class BaseChinaStockFinanceRecorder(EastmoneyTimestampsDataRecorder):
         )
 
         try:
-            self.logger.info(f"joinquant query count:{get_query_count()}")
-            self.fetch_jq_timestamp = True
+  #  marked by LB: joinquant
+  #          self.logger.info(f"joinquant query count:{get_query_count()}")
+  #          self.fetch_jq_timestamp = True
+            self.fetch_jq_timestamp = False
         except Exception as e:
             self.fetch_jq_timestamp = False
             self.logger.warning(

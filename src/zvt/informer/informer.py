@@ -63,6 +63,10 @@ class EmailInformer(Informer):
                 smtp_client.quit()
 
     def send_message(self, to_user, title, body, sub_size=20, with_sender=True, **kwargs):
+        # marked by LB
+        if True:
+            return
+
         if type(to_user) is list and sub_size:
             size = len(to_user)
             if size >= sub_size:
