@@ -55,40 +55,52 @@
 #         print("没有数据")
 #     print()
 
-import csv
+import pandas as pd
 
-def classify_transaction(transaction):
-    buy_sell = transaction[13] ##['成交数量标志']
-    if buy_sell == '1':
-        return 'buy'
-    elif buy_sell == '2':
-        return 'sell'
-    else:
-        return 'no_count'
+# 读取CSV文件
+df = pd.read_csv('stock-transaction-data200705-2023 - 副本.csv', header=0, delimiter=',',encoding='GBK')
+#
+# # 定义分类函数
+# def classify_transaction(buy_sell_flag):
+#     if buy_sell_flag == 1:
+#         return 'buy'
+#     elif buy_sell_flag == -1:
+#         return 'sell'
+#     else:
+#         return 'no_count'
+#
+# def classify_fund(fund_change_flag):
+#     if fund_change_flag == 1:
+#         return 'change_fund'
+#     else:
+#         return 'no_change'
+#
+# # 应用分类函数
+# df['buy_sell'] = df['成交数量标志'].apply(classify_transaction)
+# df['fund_change'] = df['发生金额标志'].apply(classify_fund)
+#
+# # 摘要、buy_sell和fund_change列
+# summary_df = df[['摘要', 'buy_sell', 'fund_change']].copy()
 
-def classify_fund(transaction):
-    fund_change = transaction[15]#['发生金额标志']
-    if fund_change == '1':
-        return 'change_fund'
-    else:
-        return 'no_change'
+# Create a dictionary mapping each summary to its classifications
+summary_df = df.groupby('摘要').apply(lambda x: x.iloc[0][['成交数量标志', '发生金额标志']]).to_dict('index')
+# # 去重
+# summary_df.drop_duplicates(inplace=True)
 
-def process_transaction(transaction):
-    buy_sell = classify_transaction(transaction)
-    fund_change = classify_fund(transaction)
-    return buy_sell, fund_change
+# Print the dictionary in a format that can be copied as a constant
+print("SUMMARY_CLASSIFICATION = {")
+for summary, classifications in summary_df.items():
+    print(f"    '{summary}': {classifications},")
+print("}")
 
-def main():
-    with open('stock-transaction-data200705-2023 - 副本.csv', 'r') as file:
-        reader = csv.reader(file, delimiter=',')
-        unique_types = set()  # Create a set to store unique types
-        for row in reader:
-            transaction = row
-            buy_sell, fund_change = process_transaction(transaction)
-            if transaction[2] not in unique_types:
-                unique_types.add(transaction[2])
-                print(transaction[2],buy_sell, fund_change)  # Add the tuple of types to the set
-        for types in unique_types:  # Iterate over the unique types and print them
-            print(types)
-if __name__ == '__main__':
-    main()
+#
+# # 分别按buy_sell和fund_change分组输出对应的摘要
+# print("Grouped by buy_sell:")
+# for name, group in summary_df.groupby('buy_sell'):
+#     print(f"\n{name} transactions:")
+#     print(group['摘要'].unique())
+#
+# print("\nGrouped by fund_change:")
+# for name, group in summary_df.groupby('fund_change'):
+#     print(f"\n{name} transactions:")
+#     print(group['摘要'].unique())
