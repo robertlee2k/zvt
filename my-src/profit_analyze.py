@@ -13,20 +13,26 @@ data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
 for index, row in data.iterrows():
     stock_code = row['证券代码']
     stock_name = row['证券名称']
-    summary = row['摘要']
-    volume_flag,amount_flag, = SummaryClassifier.get_classification(summary)
-    trade_amount = row['发生金额']*amount_flag
-    trade_quantity = row['成交数量']*volume_flag
 
     if stock_code:
         if stock_code not in stock_transactions:
             stock_transactions[stock_code] = {'name':stock_name,'buy': [], 'sell': [], 'profit': 0}
 
+        summary = row['摘要']
+        volume_flag, amount_flag, = SummaryClassifier.get_classification(summary)
+        trade_amount = row['发生金额'] * amount_flag
+        trade_quantity = abs(row['成交数量'] )* volume_flag  #根据成交数量标志把成交数按卖出买入设为正确的符号
+
         transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
-        if trade_amount >= 0:
-            stock_transactions[stock_code]['sell'].append(transaction)
-        else:
+
+        # 先根据成交数量标志来判断是买入还是卖出
+        if volume_flag==1:
             stock_transactions[stock_code]['buy'].append(transaction)
+        elif volume_flag==-1:
+            stock_transactions[stock_code]['sell'].append(transaction)
+        else: # 如果成交数量标志位0
+            print("ignore summary:", summary)
+
         # trade_amount已自带正负号
         stock_transactions[stock_code]['profit'] += trade_amount
 
@@ -38,8 +44,8 @@ for stock_code, transactions in stock_transactions.items():
 
     buy_total = buy_df['quantity'].sum() if not buy_df.empty else 0
     sell_total = sell_df['quantity'].sum() if not sell_df.empty else 0
-    #当前持仓数量
-    current_holdings=buy_total-sell_total
+    #当前持仓数量（自带正负号）
+    current_holdings=buy_total+sell_total
 
     buy_details = buy_df.groupby('summary')['amount'].sum().reset_index() if not buy_df.empty else pd.DataFrame(columns=['summary', 'amount'])
     sell_details = sell_df.groupby('summary')['amount'].sum().reset_index() if not sell_df.empty else pd.DataFrame(columns=['summary', 'amount'])

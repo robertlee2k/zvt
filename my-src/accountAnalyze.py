@@ -58,7 +58,7 @@
 import pandas as pd
 
 # 读取CSV文件
-df = pd.read_csv('stock-transaction-data200705-2023 - 副本.csv', header=0, delimiter=',',encoding='GBK')
+df = pd.read_csv('stock-all-data200705-2023-updated.csv', header=0, delimiter=',',encoding='GBK')
 #
 # # 定义分类函数
 # def classify_transaction(buy_sell_flag):
