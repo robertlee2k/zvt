@@ -1,41 +1,102 @@
 import pandas as pd
-from gx_summary import SummaryClassifier
+from gx_summary import SummaryClassifier, AccountConst
 
 # 创建一个字典存储每只股票的交易记录
 stock_transactions = {}
 
 # 读取CSV文件
-data = pd.read_csv('stock-transaction-data200705-2023.csv',encoding='GBK')
+data = pd.read_csv('stock-transaction-data200705-2023.csv', encoding='GBK')
 # 将“交收日期”列转换为日期类型
 data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
+
+# 初始化账户余额
+account_balance = AccountConst.INIT_CAPITAL.copy()
+# 初始化融券子账户余额
+margin_account_balance = {}
+
+# 过滤出当天仅有一条交易记录的记录
+currency_daily_counts = data.groupby(['交收日期', '货币代码']).size().reset_index(name='counts')
+single_transaction_mask = currency_daily_counts['counts'] == 1
+
+# 将日期转换为所需格式
+# currency_daily_counts['交收日期'] = currency_daily_counts['交收日期'].dt.strftime('%Y%m%d')
+single_transaction_tuples = [tuple(x) for x in currency_daily_counts.loc[single_transaction_mask, ['交收日期', '货币代码']].values]
+
+single_transaction_records = data[data[['交收日期', '货币代码']].apply(tuple, axis=1).isin(single_transaction_tuples)]
+
+# 保留需要的字段并添加新字段
+verification_results = single_transaction_records[['交收日期', '货币代码', '资金余额', '融资账户']]
+verification_results = verification_results.rename(columns={'货币代码': '货币', '资金余额': '文件记录余额'})
+verification_results['计算余额'] = 0
+verification_results['差异'] = 0
 
 # 处理每一行数据
 for index, row in data.iterrows():
     stock_code = row['证券代码']
     stock_name = row['证券名称']
+    trade_date = row['交收日期']
+    currency = row['货币代码']
+    is_margin_account = row['融资账户'] == '是'  # 检查是否为融资账户
+    margin_account_balance = 0  # 融资账户的初始金额为0
 
     if stock_code:
         if stock_code not in stock_transactions:
-            stock_transactions[stock_code] = {'name':stock_name,'buy': [], 'sell': [], 'profit': 0}
+            stock_transactions[stock_code] = {'name': stock_name, 'buy': [], 'sell': [], 'profit': 0}
 
         summary = row['摘要']
-        volume_flag, amount_flag, = SummaryClassifier.get_classification(summary)
+        volume_flag, amount_flag = SummaryClassifier.get_classification(summary)
         trade_amount = row['发生金额'] * amount_flag
-        trade_quantity = abs(row['成交数量'] )* volume_flag  #根据成交数量标志把成交数按卖出买入设为正确的符号
+        trade_quantity = abs(row['成交数量']) * volume_flag
 
         transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
 
-        # 先根据成交数量标志来判断是买入还是卖出
-        if volume_flag==1:
+        if volume_flag == 1:
             stock_transactions[stock_code]['buy'].append(transaction)
-        elif volume_flag==-1:
+        elif volume_flag == -1:
             stock_transactions[stock_code]['sell'].append(transaction)
-        else: # 如果成交数量标志位0
-            print("ignore summary:", summary)
 
-        # trade_amount已自带正负号
         stock_transactions[stock_code]['profit'] += trade_amount
 
+    # 更新账户余额
+    # 获取当天该币种的交易次数
+
+    # 从文件中读取的资金余额
+    # 找到verification_results中对应的行索引
+    checkpoint_index = verification_results[
+        (verification_results['交收日期'] == trade_date) & (verification_results['货币'] == currency)].index
+
+    # 如果当天需要验证（该币种只有一笔交易），则进行验证
+    if checkpoint_index is not None  :
+        recorded_balance = verification_results.loc[checkpoint_index, '文件记录余额'].values[0]
+        # 更新账户余额
+        if is_margin_account:
+            margin_account_balance += trade_amount
+            calculated_balance = margin_account_balance
+        else:
+            account_balance[currency] += trade_amount
+            calculated_balance = account_balance[currency]
+
+        # 如果计算余额与文件记录余额不一致，记录到验证结果DataFrame中
+        verification_results.loc[checkpoint_index, '计算余额'] = calculated_balance
+        diff=calculated_balance - recorded_balance
+        if abs(diff)<0.001: #忽略特别小的
+            diff=0
+        verification_results.loc[checkpoint_index, '差异'] = diff
+
+    # 以下是原有的代码，用于生成每只股票的盈亏汇总
+    # 先根据成交数量标志来判断是买入还是卖出
+    if volume_flag==1:
+        stock_transactions[stock_code]['buy'].append(transaction)
+    elif volume_flag==-1:
+        stock_transactions[stock_code]['sell'].append(transaction)
+    else: # 如果成交数量标志位0
+        print("ignore summary:", summary)
+
+    # trade_amount已自带正负号
+    stock_transactions[stock_code]['profit'] += trade_amount
+
+# 将验证结果输出到CSV文件
+verification_results.to_csv('verification_results.csv', index=False, encoding='GBK')
 # 创建结果列表
 result = []
 for stock_code, transactions in stock_transactions.items():
@@ -94,37 +155,3 @@ for idx, col in enumerate(result_df.columns):
 
 writer.save()
 
-# def calculate_initial_holdings(in_data):
-#     # Filter out the stock transactions data for the year 2007
-#     #data = in_data[in_data['交收日期'].dt.year == 2007]
-#
-#      # Dictionary to store cumulative trade quantities for each stock code
-#     stock_quantities = {}
-#
-#     # Calculate the initial holdings
-#     for index, row in data.iterrows():
-#         stock_code = row['证券代码']
-#         stock_name = row['证券名称']
-#         summary = row['摘要']
-#         volume_flag, amount_flag, = SummaryClassifier.get_classification(summary)
-#         trade_amount = row['发生金额'] * amount_flag
-#         trade_quantity = row['成交数量'] * volume_flag
-#
-#         if stock_code:
-#             if stock_code not in stock_quantities:
-#                 stock_quantities[stock_code]= {'证券名称': stock_name, '累计成交量': 0}
-#
-#             if trade_amount < 0:  # Sell transaction
-#                 stock_quantities[stock_code]['累计成交量'] -= trade_quantity
-#             else:  # Buy transaction
-#                 stock_quantities[stock_code]['累计成交量'] += trade_quantity
-#
-#     # Convert the dictionary to a DataFrame
-#     initial_holdings = pd.DataFrame(list(stock_quantities.items()), columns=['证券代码', '累计成交量'])
-#     # Filter out rows where the initial holding quantity is not 0
-#     initial_holdings = initial_holdings[initial_holdings['累计成交量'] != 0]
-#     return initial_holdings
-#
-# # 使用该函数来计算2007年的初始持仓
-# initial_holdings_2007 = calculate_initial_holdings(data)
-# print(initial_holdings_2007)
