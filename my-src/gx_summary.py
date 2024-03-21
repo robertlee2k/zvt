@@ -24,7 +24,7 @@ class SummaryClassifier:
         '开放基金拆分增股': {'成交数量标志': 1, '发生金额标志': 1},
         '手续费多退少补取': {'成交数量标志': 1, '发生金额标志': 1},
         '投票确认': {'成交数量标志': 0, '发生金额标志': 1},
-        '担保品划入': {'成交数量标志': 1, '发生金额标志': 1},
+        '担保品划入': {'成交数量标志': 1, '发生金额标志': 1}, # 这个应该忽略，在股份转出时一起处理了
         '担保品划出': {'成交数量标志': -1, '发生金额标志': 1},
         '新股入帐': {'成交数量标志': 1, '发生金额标志': 1},
         '新股申购': {'成交数量标志': 1, '发生金额标志': 1},
@@ -37,8 +37,10 @@ class SummaryClassifier:
         '红利入账': {'成交数量标志': 0, '发生金额标志': 1},
         '红利税补扣': {'成交数量标志': 0, '发生金额标志': 1},
         '红股入账': {'成交数量标志': 1, '发生金额标志': 1},
-        '股份转入': {'成交数量标志': 1, '发生金额标志': 1},
+        '股份转入': {'成交数量标志': 1, '发生金额标志': 1},# 这个应该忽略，在担保品划出时一起处理了
         '股份转出': {'成交数量标志': -1, '发生金额标志': 1},
+        '股份转入收购': {'成交数量标志':0, '发生金额标志': 0},  # 为爱建集团收购特殊创建
+        '股份转出收购': {'成交数量标志': 0, '发生金额标志': 0},
         '自有资金还融资': {'成交数量标志': 0, '发生金额标志': 1},
         '融入方初始交易': {'成交数量标志': 0, '发生金额标志': 1},
         '融入购回减资金': {'成交数量标志': 1, '发生金额标志': 1},
@@ -141,6 +143,8 @@ class AccountSummary:
         self.stockhold_history = pd.concat([self.stockhold_history, new_holdings], ignore_index=True)
 
     def add_to_stock_profit_history(self, new_profit_records):
+        # 去除掉持股成本为0的，并把持股成本变符号
+        new_profit_records=new_profit_records.drop(new_profit_records[new_profit_records['持股成本'] == 0].index)
         new_profit_records['持股成本']*=-1
         self.stock_profit_history = pd.concat([self.stock_profit_history, new_profit_records], ignore_index=True)
 
