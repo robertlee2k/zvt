@@ -102,11 +102,15 @@ class AccountSummary:
     }
 
     def __init__(self):
-        self.stockhold_summary = AccountSummary.init_stockhold_summary()
-        self.balance_summary = AccountSummary.init_balance_summary()
+        self.stockhold_history=pd.DataFrame() # 每日持仓历史
+        self.balance_history=pd.DataFrame()   # 每日资金余额历史
+        self.stock_profit_history=pd.DataFrame()  # 股票实现盈亏历史（不包含浮盈）
+
+        self.stockhold_record = AccountSummary.init_stockhold_record()
+        self.balance_record = AccountSummary.init_balance_record()
 
     @staticmethod
-    def init_stockhold_summary():
+    def init_stockhold_record():
         # 初始化每日持股数据DataFrame
         stockhold_data = []
         for code, details in AccountSummary.INIT_HOLDINGS.items():
@@ -121,7 +125,7 @@ class AccountSummary:
         return pd.DataFrame(stockhold_data)
 
     @staticmethod
-    def init_balance_summary():
+    def init_balance_record():
         # 初始化每日资金余额数据DataFrame
         balance_data = []
         for account, details in AccountSummary.INIT_CAPITAL.items():
@@ -132,46 +136,18 @@ class AccountSummary:
             })
         return pd.DataFrame(balance_data)
 
-    # 获取某账户离date的最近一个交收日期（不含date当日，要取的是上一日）的资金余额
-    def get_closest_balance(self, account_type, date):
-        closest_date = self.balance_summary[self.balance_summary['账户类型'] == account_type]['交收日期'].apply(
-            lambda x: abs((x - date).days)).idxmin()
-        closest_balance = self.balance_summary.loc[closest_date]
-        return closest_balance.copy()
+    def add_to_history(self, new_balance_row, new_holdings):
+        self.balance_history = pd.concat([self.balance_history, new_balance_row], ignore_index=True)
+        self.stockhold_history = pd.concat([self.stockhold_history, new_holdings], ignore_index=True)
 
-    # 获取某账户离date的最近一个交收日期(不含date当日，要取的是上一日)的某只股票持仓数据
-    def get_closest_holdings(self, account_type, date, stock_code):
-        closest_date = self.stockhold_summary[
-            (self.stockhold_summary['账户类型'] == account_type) & (self.stockhold_summary['证券代码'] == stock_code)]
-        if not closest_date.empty:
-            closest_date = closest_date['交收日期'].apply(lambda x: abs((x - date).days)).idxmin()
-            closest_holdings = self.stockhold_summary.loc[closest_date]
-            return closest_holdings.copy()
-        else:
-            return None
+    def add_to_stock_profit_history(self, new_profit_records):
+        new_profit_records['持股成本']*=-1
+        self.stock_profit_history = pd.concat([self.stock_profit_history, new_profit_records], ignore_index=True)
 
-    def update_summary(self，):
-        today = pd.Timestamp('today').normalize()
-
-        # Find the closest record to today
-        closest_date_idx = self.balance_summary['交收日期'].apply(lambda x: abs((x - today).days)).idxmin()
-
-        # Update balance and holdings
-        self.balance_summary.loc[closest_date_idx, '资金余额'] += 100
-        self.stockhold_summary.loc[self.stockhold_summary['证券代码'] == '600161', '持股数量'] -= 100
-
-        # Append the updated data to the summaries
-        new_balance_row = {'交收日期': today, '账户类型': self.balance_summary.loc[closest_date_idx, '账户类型'],
-                           '资金余额': self.balance_summary.loc[closest_date_idx, '资金余额']}
-
-        new_holdings_row = self.stockhold_summary[self.stockhold_summary['证券代码'] == '600161'].copy()
-
-        new_balance_row.name = len(self.balance_summary)
-        new_holdings_row.name = len(self.stockhold_summary)
-
-        self.balance_summary = self.balance_summary.append(new_balance_row)
-        self.stockhold_summary = self.stockhold_summary.append(new_holdings_row)
-
+    def save_account_history(self):
+        self.balance_history.to_csv('balance_summary.csv', index=False, encoding='GBK')
+        self.stockhold_history.to_csv('holdings_summary.csv', index=False, encoding='GBK')
+        self.stock_profit_history.to_csv('stock_profit_history.csv', index=False, encoding='GBK')
 
 # Example usage
 if __name__ == "__main__":
@@ -185,9 +161,9 @@ if __name__ == "__main__":
     # 使用示例
     account_summary = AccountSummary()
     print("每日持股数据:")
-    print(account_summary.stockhold_summary)
+    print(account_summary.stockhold_record)
     print("\n每日资金余额数据:")
-    print(account_summary.balance_summary)
+    print(account_summary.balance_record)
 
     print("\n获取某日的上一日资金余额数据:")
     print(account_summary.get_closest_balance('国信账户', pd.to_datetime('20130520', format='%Y%m%d')))

@@ -42,20 +42,28 @@ def verify_account_balance(trade_date, currency, calculated_balance, verificatio
 
 # 分析交易流水记录并输出到csv文件
 def analyze_transactions():
-
-    # 初始化每日持股、每日资金余额数据DataFrame
-    account_summary = AccountSummary()
-    # 初始化每日持股数据:
-    stockhold_summary = account_summary.stockhold_summary
-    # 初始化每日资金余额数据:
-    balance_summary=account_summary.balance_summary
-
     # 创建一个字典存储每只股票的交易记录
     stock_transactions = {}
     # 读取CSV文件
     data = pd.read_csv('stock-transaction-data200705-2023.csv', encoding='GBK')
     # 将“交收日期”列转换为日期类型
     data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
+    #获取校验数据
+    verification_results = get_verification_data(data)
+
+    # 初始化每日持股、每日资金余额数据DataFrame
+    account_summary = AccountSummary()
+    # 初始化每日持股数据:
+    stockhold_summary = account_summary.stockhold_record
+    # 初始化每日资金余额数据:
+    balance_summary=account_summary.balance_record
+
+    # 记录当天的持仓
+    today_balance=balance_summary.copy()
+    today_holdings=stockhold_summary.copy()
+
+    # 用于判断新的trade_date要不要插入到history里
+    last_trade_date=pd.to_datetime('20070501', format='%Y%m%d')
 
     # 处理每一行数据
     for index, row in data.iterrows():
@@ -65,6 +73,25 @@ def analyze_transactions():
         currency = row['货币代码']
         # 获取账户类型
         account_type=SummaryClassifier.get_account_type(row['货币代码'],row['融资账户'])
+
+        # 新的一天，将之前一天的记录更新追加到history里，并初始化新的日期
+        if trade_date!=last_trade_date:
+            last_trade_date=trade_date
+            #将上一交易日的记录加入历史记录df中
+            account_summary.add_to_history(today_balance, today_holdings)
+            # copy一份作为新的交易日的空白记录
+            today_holdings=today_holdings.copy()
+            today_balance=today_balance.copy()
+            # Check if the stock quantity is zero after the trade
+            zero_quantity_index = today_holdings[today_holdings['持股数量'] == 0].index
+            if not zero_quantity_index.empty:
+                # 将实现盈亏的数据加入到历史记录中
+                account_summary.add_to_stock_profit_history(today_holdings.loc[zero_quantity_index])
+                # Remove records for stocks with zero quantity
+                today_holdings = today_holdings.drop(zero_quantity_index)
+            # 新交易日的日期设定
+            today_holdings['交收日期']=trade_date
+            today_balance['交收日期']=trade_date
 
         if stock_code:
             if stock_code not in stock_transactions:
@@ -77,8 +104,28 @@ def analyze_transactions():
 
             transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
 
-            # 用当日所有的股票买卖动作更新持仓stockhold_summary，如果该股票持仓为0，则不记录
-            ## TODO
+            # 对于用当日所有的股票买卖动作更新持仓today_holdings
+            # 找到对应的持仓记录
+            if stock_code.isdigit() and '-'!=stock_name:
+                stock_holding_index = today_holdings[(today_holdings['账户类型'] == account_type) & (today_holdings['证券代码']==stock_code)].index
+                # 如果该股票有持仓记录
+                if not stock_holding_index.empty:
+                    today_holdings.loc[stock_holding_index,'持股数量']+= trade_quantity
+                    today_holdings.loc[stock_holding_index,'持股成本']-= trade_amount
+                else:
+                    one_holding=pd.DataFrame([{
+                        '交收日期': pd.to_datetime(trade_date, format='%Y%m%d'),
+                        '账户类型': account_type,
+                        '证券代码': stock_code,
+                        '证券名称': stock_name,
+                        '持股数量': trade_quantity,
+                        '持股成本': trade_amount*-1
+                    }])
+                    today_holdings=pd.concat([today_holdings, one_holding], ignore_index=True)
+
+
+
+
             if volume_flag == 1:
                 stock_transactions[stock_code]['buy'].append(transaction)
             elif volume_flag == -1:
@@ -87,32 +134,14 @@ def analyze_transactions():
             stock_transactions[stock_code]['profit'] += trade_amount
 
             # 用最新的trade_amount加上该账户的最近一个交易日的账户余额，追加到balance_summary
-            ## Todo
-            last_balance=account_summary.get_closest_balance(account_type,trade_date)
-            last_balance['交收日期']
-            if is_margin_account:
-                margin_account_balance += trade_amount
-                calculated_balance = margin_account_balance
-            else:
-                account_balance[currency] += trade_amount
-                calculated_balance = account_balance[currency]
-
-            # 先根据成交数量标志来判断是买入还是卖出
-            if volume_flag == 1:
-                stock_transactions[stock_code]['buy'].append(transaction)
-            elif volume_flag == -1:
-                stock_transactions[stock_code]['sell'].append(transaction)
-            #        else: # 如果成交数量标志位0
-            # print("ignore summary:", summary)
-
-            # trade_amount已自带正负号
-            stock_transactions[stock_code]['profit'] += trade_amount
+            today_balance.loc[today_balance['账户类型'] == account_type, '资金余额'] += trade_amount
+            calculated_balance=today_balance.loc[today_balance['账户类型'] == account_type, '资金余额'].values[0]
 
             # 校验特定交易日的资金余额
-            if verification_results is None:
-                verification_results = get_verification_data(data)
             verification_results = verify_account_balance(trade_date, currency, calculated_balance,
                                                           verification_results)
+    # 处理最后一天的数据
+    account_summary.add_to_history(today_balance, today_holdings)
 
     # 创建结果列表
     result = []
@@ -154,6 +183,9 @@ def analyze_transactions():
 
     # 将验证结果输出到CSV文件
     verification_results.to_csv('verification_results.csv', index=False, encoding='GBK')
+
+    # 输出每日持仓结果
+    account_summary.save_account_history()
 
     # 将交易结果输出到Excel文件
     result_df = pd.DataFrame(result)
