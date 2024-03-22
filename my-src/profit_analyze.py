@@ -126,6 +126,7 @@ def analyze_transactions():
                         today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
                                                                stock_name, cost, trade_quantity)
                     else:
+                        ## TODO 融资借款 和融资还款这种只有发生金额没有成交价格应该忽略？
                         today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
                                                                stock_name, trade_amount, trade_quantity)
 
