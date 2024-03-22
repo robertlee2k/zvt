@@ -113,16 +113,20 @@ def analyze_transactions():
                     if summary == '股份转出':
                         # 要单独计算成本
                         trans_out = get_record_from_holdings(today_holdings, account_type, stock_code)
-                        trade_amount = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
+                        cost = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
                         today_holdings = insert_or_update_holdings(today_holdings, "国信融资账户", trade_date, stock_code,
-                                                                   stock_name, trade_amount*-1, abs(trade_quantity))
+                                                                   stock_name, -1*cost, abs(trade_quantity))
+                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
+                                                               stock_name, cost, trade_quantity)
                     elif summary == '担保品划出':
                         trans_out = get_record_from_holdings(today_holdings, account_type, stock_code)
-                        trade_amount = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
+                        cost = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
                         today_holdings = insert_or_update_holdings(today_holdings, "国信账户", trade_date, stock_code,
-                                                                   stock_name, trade_amount*-1, abs(trade_quantity))
-
-                    today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
+                                                                   stock_name, -1*cost, abs(trade_quantity))
+                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
+                                                               stock_name, cost, trade_quantity)
+                    else:
+                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
                                                                stock_name, trade_amount, trade_quantity)
 
             if volume_flag == 1:
