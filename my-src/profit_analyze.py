@@ -3,6 +3,17 @@ import pandas as pd
 from gx_summary import SummaryClassifier, AccountSummary
 
 
+# 拆分逻辑：根据空格分隔拆分证券名称和证券代码
+def split_security(row):
+    parts = row['交易证券'].split()
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    elif len(parts) == 1 and parts[0].isdigit() and len(parts[0]) == 6:
+        return parts[0], '-'
+    else:
+        return '-'.join(parts[:-1]), parts[-1]
+
+
 # 分析交易流水记录并输出到csv文件
 def analyze_transactions():
     # 创建一个字典存储每只股票的交易记录
@@ -13,13 +24,10 @@ def analyze_transactions():
     data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
 
     # 分拆证券代码和证券名称
-    data['证券代码'] = data['交易证券'].str.extract(r'(\d{6})').fillna('-')
-    data['证券名称'] = data['交易证券'].str.replace(r'\d', '', regex=True).str.strip().fillna('-')
-
-    test1=data['证券代码'].unique()
-    test2=data['证券名称'].unique()
-    print(test1)
-    print(test2)
+    # data['证券代码'] = data['交易证券'].str.extract(r'(\d{6})').fillna('-')
+    # data['证券名称'] = data['交易证券'].str.replace(r'\d', '', regex=True).str.strip().fillna('-')
+    # 应用拆分逻辑
+    data[['证券名称', '证券代码']] = data.apply(split_security, axis=1, result_type='expand')
 
     # 初始化每日持股、每日资金余额数据DataFrame
     account_summary = AccountSummary()
@@ -28,41 +36,38 @@ def analyze_transactions():
     # 初始化每日资金余额数据:
     balance_summary = account_summary.balance_record
 
-    # 记录当天的持仓
+    # 记录初始日期的持仓
     today_balance = balance_summary.copy()
     today_holdings = stockhold_summary.copy()
-
-    # 用于判断新的trade_date要不要插入到history里
-    last_trade_date = pd.to_datetime('20070501', format='%Y%m%d')
 
     # Step 1: Group by '交收日期'
     grouped_by_date = data.groupby('交收日期')
 
     for trade_date, date_group in grouped_by_date:
+        # 设置调试用的断点
         debug_date = pd.to_datetime('20231120', format='%Y%m%d')
         if debug_date == trade_date:
-            print("debug point.")
+            print("here is the debug point.")
+
         # 新的一天，将之前一天的记录更新追加到history里，并初始化新的日期
-        if trade_date != last_trade_date:
-            last_trade_date = trade_date
-            # 将上一交易日的记录加入历史记录df中
-            account_summary.add_to_history(today_balance, today_holdings)
-            # copy一份作为新的交易日的空白记录
-            today_holdings = today_holdings.copy()
-            today_balance = today_balance.copy()
-            # Check if the stock quantity is zero after the trade
-            zero_quantity_index = today_holdings[today_holdings['持股数量'] == 0].index
-            if not zero_quantity_index.empty:
-                # 将实现盈亏的数据加入到历史记录中
-                account_summary.add_to_stock_profit_history(today_holdings.loc[zero_quantity_index])
-                # Remove records for stocks with zero quantity
-                today_holdings = today_holdings.drop(zero_quantity_index)
-            # 新交易日的日期设定
-            today_holdings['交收日期'] = trade_date
-            today_balance['交收日期'] = trade_date
+        # 将上一交易日的记录加入历史记录df中
+        account_summary.add_to_history(today_balance, today_holdings)
+        # copy一份作为新的交易日的空白记录
+        today_holdings = today_holdings.copy()
+        today_balance = today_balance.copy()
+        # Check if the stock quantity is zero after the trade
+        zero_quantity_index = today_holdings[today_holdings['持股数量'] == 0].index
+        if not zero_quantity_index.empty:
+            # 将实现盈亏的数据加入到历史记录中
+            account_summary.add_to_stock_profit_history(today_holdings.loc[zero_quantity_index])
+            # Remove records for stocks with zero quantity
+            today_holdings = today_holdings.drop(zero_quantity_index)
+        # 新交易日的日期设定
+        today_holdings['交收日期'] = trade_date
+        today_balance['交收日期'] = trade_date
 
         # Step 2: Group by '股票代码'，不要改变原始顺序
-        grouped_by_code = date_group.groupby('证券代码',sort=False)
+        grouped_by_code = date_group.groupby('证券代码', sort=False)
         for stock_code, code_date_group in grouped_by_code:
             # 把某一天对于某一只股票的操作全部集合起来（用于判断转入转出到底是股份冻结，还是融资与普通账户直接的转入转出）
             summary_set = code_date_group['摘要'].unique()
@@ -83,10 +88,11 @@ def analyze_transactions():
                 # 获取账户类型
                 account_type = SummaryClassifier.get_account_type(row['货币代码'], row['融资账户'])
                 summary = row['摘要']
-                # 根据摘要设置成交量和成交金额的正负号
-                volume_flag, amount_flag = SummaryClassifier.get_classification(summary)
-                trade_amount = row['发生金额'] * amount_flag
+                # 根据摘要设置成交量和成交金额、银行流入流出的正负号
+                volume_flag, amount_flag, bank_flag = SummaryClassifier.get_classification(summary)
                 trade_quantity = abs(row['成交数量']) * volume_flag
+                trade_amount = row['发生金额'] * amount_flag
+                bank_flow_amount=row['发生金额'] * bank_flag
 
                 transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
 
@@ -146,16 +152,15 @@ def analyze_transactions():
                 stock_transactions[stock_code]['profit'] += trade_amount
 
                 # 用最新的trade_amount加上该账户的最近一个交易日的账户余额，追加到balance_summary
-                today_balance.loc[today_balance['账户类型'] == account_type, '资金余额'] += trade_amount
+                balance_index=today_balance[today_balance['账户类型'] == account_type].index
+                today_balance.loc[balance_index, '资金余额'] += trade_amount
+                today_balance.loc[balance_index, '累计净转入资金'] += bank_flow_amount
                 recorded_balance = row['资金余额']
-                today_balance.loc[today_balance['账户类型'] == account_type, '记录账户余额'] = recorded_balance
+                today_balance.loc[balance_index, '记录账户余额'] = recorded_balance
             # end loop : for index, row in code_date_group:
         # end loop : for stock_code, code_date_group in grouped_by_code:
 
         # 每个交易日结束，用最后的recorded_balance比较更新数据
-
-        # 获取date_group最后一行的['资金余额']列数值
-
         today_balance['校验差异'] = today_balance['资金余额'] - today_balance['记录账户余额']
         # 将差异小于0.01的值设置为0
         today_balance.loc[abs(today_balance['校验差异']) < 0.01, '校验差异'] = 0

@@ -28,39 +28,39 @@ class SummaryClassifier:
         '担保品划入': {'成交数量标志': 1, '发生金额标志': 1},  # 这个应该忽略，在股份转出时一起处理了
         '担保品划出': {'成交数量标志': -1, '发生金额标志': 1},
         '新股入帐': {'成交数量标志': 1, '发生金额标志': 1},
-        '新股申购': {'成交数量标志': 0, '发生金额标志': 0},# 申购相当于只是资金冻结，申购中签才扣钱
+        '新股申购': {'成交数量标志': 0, '发生金额标志': 0},  # 申购相当于只是资金冻结，申购中签才扣钱
         '港股通组合费': {'成交数量标志': 1, '发生金额标志': 1},
         '港股通股票买入': {'成交数量标志': 1, '发生金额标志': 1},
         '港股通股票卖出': {'成交数量标志': -1, '发生金额标志': 1},
         '申购中签': {'成交数量标志': 0, '发生金额标志': 1},
-        '申购还款': {'成交数量标志': 0, '发生金额标志': 0}, # 申购相当于只是资金冻结，申购中签才扣钱
+        '申购还款': {'成交数量标志': 0, '发生金额标志': 0},  # 申购相当于只是资金冻结，申购中签才扣钱
         '红利入帐0': {'成交数量标志': 0, '发生金额标志': 1},
         '红利入账': {'成交数量标志': 0, '发生金额标志': 1},
         '红利税补扣': {'成交数量标志': 0, '发生金额标志': 1},
         '红股入账': {'成交数量标志': 1, '发生金额标志': 1},
         '股份转入': {'成交数量标志': 1, '发生金额标志': 1},  # 这个应该忽略，在担保品划出时一起处理了
         '股份转出': {'成交数量标志': -1, '发生金额标志': 1},
-        '自有资金还融资': {'成交数量标志': 0, '发生金额标志': 1},
-        '融入方初始交易': {'成交数量标志': 0, '发生金额标志': 1},
-        '融入购回减资金': {'成交数量标志': 0, '发生金额标志': 1},
+        '自有资金还融资': {'成交数量标志': 0, '发生金额标志': 1,'银行标志':1},
+        '融入方初始交易': {'成交数量标志': 0, '发生金额标志': 1,'银行标志':1}, #这是非融资账户里的，和下一条之间差了个利息
+        '融入购回减资金': {'成交数量标志': 0, '发生金额标志': 1,'银行标志':1},
         '融券回购': {'成交数量标志': 1, '发生金额标志': 1},
         '融券购回': {'成交数量标志': -1, '发生金额标志': 1},
-        '融资借款': {'成交数量标志': 0, '发生金额标志': 1},
-        '融资利息': {'成交数量标志': 1, '发生金额标志': 1},
+        '融资借款': {'成交数量标志': 0, '发生金额标志': 1,'银行标志':1},
+        '融资利息': {'成交数量标志': 1, '发生金额标志': 1,'银行标志':0}, # 融资利息不是银行转入转出部分，是账户内消耗
         '融资平仓': {'成交数量标志': -1, '发生金额标志': 1},
         '融资开仓': {'成交数量标志': 1, '发生金额标志': 1},
-        '融资还款': {'成交数量标志': 0, '发生金额标志': 1},
+        '融资还款': {'成交数量标志': 0, '发生金额标志': 1,'银行标志':1},
         '要约资金': {'成交数量标志': 0, '发生金额标志': 1},
         '证券买入': {'成交数量标志': 1, '发生金额标志': 1},
         '证券卖出': {'成交数量标志': -1, '发生金额标志': 1},
-        '证券转银行': {'成交数量标志': 1, '发生金额标志': 1},
+        '证券转银行': {'成交数量标志': 1, '发生金额标志': 1,'银行标志':1},
         '资金冻结': {'成交数量标志': -1, '发生金额标志': 0},
-        '资金自动还融资': {'成交数量标志': 0, '发生金额标志': 1},
-        '银行转证券': {'成交数量标志': -1, '发生金额标志': 1},
+        '资金自动还融资': {'成交数量标志': 0, '发生金额标志': 1,'银行标志':1},
+        '银行转证券': {'成交数量标志': -1, '发生金额标志': 1,'银行标志':1},
     }
 
     @staticmethod
-    # return volume_flag , amount_flag
+    # return volume_flag , amount_flag,bank_flag
     def get_classification(trans_summary):
         """
         Returns the transaction flag and fund change flag for a given summary.
@@ -69,9 +69,14 @@ class SummaryClassifier:
         """
         classification = SummaryClassifier.SUMMARY_CLASSIFICATION.get(trans_summary, None)
         if classification:
-            return classification['成交数量标志'], classification['发生金额标志']
+            # 判断是否包含'银行标志'这个key
+            if '银行标志' in classification:
+                bank_flag = classification['银行标志']
+            else:
+                bank_flag = 0
+            return classification['成交数量标志'], classification['发生金额标志'],bank_flag
         else:
-            return None, None
+            return None, None,None
 
     @staticmethod
     def get_account_type(currency, is_margin):
@@ -97,9 +102,9 @@ class AccountSummary:
 
     # 账户在初始20070507时点的资金余额
     INIT_CAPITAL = {  # 20070510时的初始资金余额（不含股票）
-        '国信B股': {'交收日期': '20070507', '资金余额': 0},
-        '国信账户': {'交收日期': '20070507', '资金余额': 45046.37},  # 这是从后续交易中倒推算出来的
-        '国信融资账户': {'交收日期': '20070507', '资金余额': 0},
+        '国信B股': {'交收日期': '20070507', '累计净转入资金':25000,'资金余额': 0},
+        '国信账户': {'交收日期': '20070507', '累计净转入资金':300000,'资金余额': 45046.37},  # 这是从后续交易中倒推算出来的
+        '国信融资账户': {'交收日期': '20070507', '累计净转入资金':0,'资金余额': 0},
     }
 
     def __init__(self):
@@ -133,9 +138,10 @@ class AccountSummary:
             balance_data.append({
                 '交收日期': pd.to_datetime(details['交收日期'], format='%Y%m%d'),
                 '账户类型': account,
+                '累计净转入资金':details['累计净转入资金'],
                 '资金余额': details['资金余额'],
-                '记录账户余额': 0, #交易文件中记录的账户余额
-                '校验差异': 0   #校验数据
+                '记录账户余额': 0,  # 交易文件中记录的账户余额
+                '校验差异': 0  # 校验数据
             })
         return pd.DataFrame(balance_data)
 
@@ -154,17 +160,17 @@ class AccountSummary:
         with pd.ExcelWriter('analyze_summary.xlsx') as writer:
             # 将数据写入Excel文件的不同sheet
             # Format the numbers uniformly as '###,###,###.##'
-            #self.balance_history['资金余额'] = self.balance_history['资金余额'].apply(lambda x: '{:.0f}'.format(x))
+            # self.balance_history['资金余额'] = self.balance_history['资金余额'].apply(lambda x: '{:.0f}'.format(x))
             self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False, encoding='GBK')
 
             # Format the numbers uniformly as '###,###,###.##'
-            #self.stockhold_history['持股成本'] = self.stockhold_history['持股成本'].apply(lambda x: '{:.0f}'.format(x))
+            # self.stockhold_history['持股成本'] = self.stockhold_history['持股成本'].apply(lambda x: '{:.0f}'.format(x))
             self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False, encoding='GBK')
 
             # Rename the column '持股成本' to '实现盈亏'
             self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
             # Format the numbers uniformly as '###,###,###.##'
-            #self.stock_profit_history['实现盈亏'] = self.stock_profit_history['实现盈亏'].apply(lambda x: '{:.0f}'.format(x))
+            # self.stock_profit_history['实现盈亏'] = self.stock_profit_history['实现盈亏'].apply(lambda x: '{:.0f}'.format(x))
             self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False,
                                                encoding='GBK')
 
