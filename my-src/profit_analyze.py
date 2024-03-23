@@ -3,42 +3,6 @@ import pandas as pd
 from gx_summary import SummaryClassifier, AccountSummary
 
 
-# 从交易记录中过滤出当天该账户只有一条交易的记录，用于后续资金余额的校验
-def get_verification_data(data):
-    # 过滤出当天仅有一条交易记录的记录
-    currency_daily_counts = data.groupby(['交收日期', '货币代码']).size().reset_index(name='counts')
-    single_transaction_mask = currency_daily_counts['counts'] == 1
-    single_transaction_tuples = [tuple(x) for x in
-                                 currency_daily_counts.loc[single_transaction_mask, ['交收日期', '货币代码']].values]
-    single_transaction_records = data[data[['交收日期', '货币代码']].apply(tuple, axis=1).isin(single_transaction_tuples)]
-    # 保留需要的字段并添加新字段
-    verification_results = single_transaction_records[['交收日期', '货币代码', '资金余额', '融资账户']].copy()
-    verification_results = verification_results.rename(columns={'货币代码': '货币', '资金余额': '文件记录余额'})
-    verification_results['计算余额'] = 0
-    verification_results['差异'] = 0
-    return verification_results
-
-
-# 校验特定交易日的资金余额并记录
-def verify_account_balance(trade_date, currency, calculated_balance, verification_results):
-    # 获取当天该币种的交易次数
-    # 从文件中读取的资金余额
-    # 找到verification_results中对应的行索引
-    checkpoint_index = verification_results[
-        (verification_results['交收日期'] == trade_date) & (verification_results['货币'] == currency)].index
-    # 如果当天需要验证（该币种只有一笔交易），则进行验证
-    if not checkpoint_index.empty:
-        recorded_balance = verification_results.loc[checkpoint_index, '文件记录余额'].values[0]
-
-        # 如果计算余额与文件记录余额不一致，记录到验证结果DataFrame中
-        verification_results.loc[checkpoint_index, '计算余额'] = calculated_balance
-        diff = calculated_balance - recorded_balance
-        if abs(diff) < 0.001:  # 忽略特别小的
-            diff = 0
-        verification_results.loc[checkpoint_index, '差异'] = diff
-    return verification_results
-
-
 # 分析交易流水记录并输出到csv文件
 def analyze_transactions():
     # 创建一个字典存储每只股票的交易记录
@@ -47,8 +11,15 @@ def analyze_transactions():
     data = pd.read_csv('stock-transaction-data200705-2023.csv', encoding='GBK')
     # 将“交收日期”列转换为日期类型
     data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
-    # 获取校验数据
-    verification_results = get_verification_data(data)
+
+    # 分拆证券代码和证券名称
+    data['证券代码'] = data['交易证券'].str.extract(r'(\d{6})').fillna('-')
+    data['证券名称'] = data['交易证券'].str.replace(r'\d', '', regex=True).str.strip().fillna('-')
+
+    test1=data['证券代码'].unique()
+    test2=data['证券名称'].unique()
+    print(test1)
+    print(test2)
 
     # 初始化每日持股、每日资金余额数据DataFrame
     account_summary = AccountSummary()
@@ -64,15 +35,13 @@ def analyze_transactions():
     # 用于判断新的trade_date要不要插入到history里
     last_trade_date = pd.to_datetime('20070501', format='%Y%m%d')
 
-    # 处理每一行数据
-    for index, row in data.iterrows():
-        stock_code = row['证券代码']
-        stock_name = row['证券名称']
-        trade_date = row['交收日期']
-        currency = row['货币代码']
-        # 获取账户类型
-        account_type = SummaryClassifier.get_account_type(row['货币代码'], row['融资账户'])
+    # Step 1: Group by '交收日期'
+    grouped_by_date = data.groupby('交收日期')
 
+    for trade_date, date_group in grouped_by_date:
+        debug_date = pd.to_datetime('20231120', format='%Y%m%d')
+        if debug_date == trade_date:
+            print("debug point.")
         # 新的一天，将之前一天的记录更新追加到history里，并初始化新的日期
         if trade_date != last_trade_date:
             last_trade_date = trade_date
@@ -92,58 +61,105 @@ def analyze_transactions():
             today_holdings['交收日期'] = trade_date
             today_balance['交收日期'] = trade_date
 
-        if stock_code:
-            if stock_code not in stock_transactions:
-                stock_transactions[stock_code] = {'name': stock_name, 'buy': [], 'sell': [], 'profit': 0}
-
-            summary = row['摘要']
-            volume_flag, amount_flag = SummaryClassifier.get_classification(summary)
-            trade_amount = row['发生金额'] * amount_flag
-            trade_quantity = abs(row['成交数量']) * volume_flag
-
-            transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
-
-            # 对于用当日所有的股票买卖动作更新持仓today_holdings
-            # 找到对应的持仓记录
-            if stock_code.isdigit() :
-                # 特别处理 ： '担保品划入'，'股份转入' 忽略。'股份转出'，'担保品划出'时直接对对方账户操作
-                if summary == '担保品划入' or summary == '股份转入':
-                    pass
+        # Step 2: Group by '股票代码'，不要改变原始顺序
+        grouped_by_code = date_group.groupby('证券代码',sort=False)
+        for stock_code, code_date_group in grouped_by_code:
+            # 把某一天对于某一只股票的操作全部集合起来（用于判断转入转出到底是股份冻结，还是融资与普通账户直接的转入转出）
+            summary_set = code_date_group['摘要'].unique()
+            transaction_pair = False
+            # 针对这些特殊的交易格式
+            if any(item in summary_set for item in ['担保品划入', '股份转出', '股份转入', '担保品划出']):
+                # 使用集合操作来判断‘担保品划入’和'股份转出'是否成对出现
+                if {'担保品划入', '股份转出'}.issubset(summary_set):
+                    transaction_pair = True
+                elif {'股份转入', '担保品划出'}.issubset(summary_set):
+                    transaction_pair = True
                 else:
-                    if summary == '股份转出':
-                        # 要单独计算成本
-                        trans_out = get_record_from_holdings(today_holdings, account_type, stock_code)
-                        cost = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
-                        today_holdings = insert_or_update_holdings(today_holdings, "国信融资账户", trade_date, stock_code,
-                                                                   stock_name, -1*cost, abs(trade_quantity))
-                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
-                                                               stock_name, cost, trade_quantity)
-                    elif summary == '担保品划出':
-                        trans_out = get_record_from_holdings(today_holdings, account_type, stock_code)
-                        cost = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
-                        today_holdings = insert_or_update_holdings(today_holdings, "国信账户", trade_date, stock_code,
-                                                                   stock_name, -1*cost, abs(trade_quantity))
-                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
-                                                               stock_name, cost, trade_quantity)
-                    else:
-                        ## TODO 融资借款 和融资还款这种只有发生金额没有成交价格应该忽略？
-                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date, stock_code,
-                                                               stock_name, trade_amount, trade_quantity)
+                    transaction_pair = False
 
-            if volume_flag == 1:
-                stock_transactions[stock_code]['buy'].append(transaction)
-            elif volume_flag == -1:
-                stock_transactions[stock_code]['sell'].append(transaction)
+            # 处理每一笔交易
+            for index, row in code_date_group.iterrows():
+                stock_name = row['证券名称']
+                # 获取账户类型
+                account_type = SummaryClassifier.get_account_type(row['货币代码'], row['融资账户'])
+                summary = row['摘要']
+                # 根据摘要设置成交量和成交金额的正负号
+                volume_flag, amount_flag = SummaryClassifier.get_classification(summary)
+                trade_amount = row['发生金额'] * amount_flag
+                trade_quantity = abs(row['成交数量']) * volume_flag
 
-            stock_transactions[stock_code]['profit'] += trade_amount
+                transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
 
-            # 用最新的trade_amount加上该账户的最近一个交易日的账户余额，追加到balance_summary
-            today_balance.loc[today_balance['账户类型'] == account_type, '资金余额'] += trade_amount
-            calculated_balance = today_balance.loc[today_balance['账户类型'] == account_type, '资金余额'].values[0]
+                # 是否是第一次交易这个股票
+                if stock_code not in stock_transactions:
+                    stock_transactions[stock_code] = {'name': stock_name, 'buy': [], 'sell': [], 'profit': 0}
 
-            # 校验特定交易日的资金余额
-            verification_results = verify_account_balance(trade_date, currency, calculated_balance,
-                                                          verification_results)
+                # 对于用当日所有的股票买卖动作更新持仓today_holdings的股票数量及股票成本
+                # 找到对应的持仓记录
+                if stock_code.isdigit() and stock_name != '-':
+                    if transaction_pair:  # 只有需要特殊处理的才这样处理
+                        # 特别处理 ： '担保品划入'，'股份转入' 忽略。'股份转出'，'担保品划出'时直接对对方账户操作
+                        if summary == '担保品划入' or summary == '股份转入':
+                            pass
+                        else:
+                            if summary == '股份转出':
+                                # 要单独计算成本
+                                trans_out = get_record_from_holdings(today_holdings, account_type, stock_code)
+                                cost = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
+                                today_holdings = insert_or_update_holdings(today_holdings, "国信融资账户", trade_date,
+                                                                           stock_code,
+                                                                           stock_name, -1 * cost, abs(trade_quantity))
+                                today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
+                                                                           stock_code,
+                                                                           stock_name, cost, trade_quantity)
+                            elif summary == '担保品划出':
+                                trans_out = get_record_from_holdings(today_holdings, account_type, stock_code)
+                                cost = (abs(trade_quantity) / trans_out['持股数量'].values[0]) * trans_out['持股成本'].values[0]
+                                today_holdings = insert_or_update_holdings(today_holdings, "国信账户", trade_date,
+                                                                           stock_code,
+                                                                           stock_name, -1 * cost, abs(trade_quantity))
+                                today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
+                                                                           stock_code,
+                                                                           stock_name, cost, trade_quantity)
+                            else:  # 需要特殊处理的code但属于其他交易类型
+                                cost = trade_amount
+                                # 融资借款 和融资还款这种只有发生金额没有成交价格的在持股成本计算时要忽略
+                                if summary == '融资借款' or summary == '融资还款':
+                                    cost = 0
+                                today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
+                                                                           stock_code,
+                                                                           stock_name, cost, trade_quantity)
+                    else:  # 不需要特殊处理的
+                        cost = trade_amount
+                        # 融资借款 和融资还款这种只有发生金额没有成交价格的在持股成本计算时要忽略
+                        if summary == '融资借款' or summary == '融资还款':
+                            cost = 0
+                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
+                                                                   stock_code,
+                                                                   stock_name, cost, trade_quantity)
+
+                if volume_flag == 1:
+                    stock_transactions[stock_code]['buy'].append(transaction)
+                elif volume_flag == -1:
+                    stock_transactions[stock_code]['sell'].append(transaction)
+
+                stock_transactions[stock_code]['profit'] += trade_amount
+
+                # 用最新的trade_amount加上该账户的最近一个交易日的账户余额，追加到balance_summary
+                today_balance.loc[today_balance['账户类型'] == account_type, '资金余额'] += trade_amount
+                recorded_balance = row['资金余额']
+                today_balance.loc[today_balance['账户类型'] == account_type, '记录账户余额'] = recorded_balance
+            # end loop : for index, row in code_date_group:
+        # end loop : for stock_code, code_date_group in grouped_by_code:
+
+        # 每个交易日结束，用最后的recorded_balance比较更新数据
+
+        # 获取date_group最后一行的['资金余额']列数值
+
+        today_balance['校验差异'] = today_balance['资金余额'] - today_balance['记录账户余额']
+        # 将差异小于0.01的值设置为0
+        today_balance.loc[abs(today_balance['校验差异']) < 0.01, '校验差异'] = 0
+    # end loop : for trade_date, date_group in grouped_by_date
     # 处理最后一天的数据
     account_summary.add_to_history(today_balance, today_holdings)
 
@@ -185,9 +201,6 @@ def analyze_transactions():
         result[-1]['买入明细'] = buy_details.set_index('summary')['amount'].to_dict()
         result[-1]['卖出明细'] = sell_details.set_index('summary')['amount'].to_dict()
 
-    # 将验证结果输出到CSV文件
-    verification_results.to_csv('verification_results.csv', index=False, encoding='GBK')
-
     # 输出每日持仓结果
     account_summary.save_account_history()
 
@@ -217,7 +230,7 @@ def get_record_from_holdings(today_holdings, account_type, stock_code):
     if not stock_holding_index.empty:
         return today_holdings.loc[stock_holding_index]
     else:
-        print("转入转出错误：",account_type,stock_code)
+        print("转入转出错误：", account_type, stock_code)
         print(today_holdings)
         return None
 
