@@ -28,30 +28,86 @@
 # FinanceFactor.record_data(provider='eastmoney',code='000338')
 # df=FinanceFactor.query_data(provider='eastmoney',code='000338',columns=FinanceFactor.important_cols(),index='timestamp')
 # print(df)
-import pandas as pd
 
-# 创建示例数据
-data = {'交易字段': ["-600060", "-  -", "海信电器 600060", "GC001 204001"]}
-df = pd.DataFrame(data)
 
-# 拆分逻辑：根据空格分隔拆分证券名称和证券代码
-def split_security(row):
-    parts = row['交易字段'].split()
-    if len(parts) == 2:
-        return parts[0], parts[1]
-    elif len(parts) == 1 and parts[0].isdigit() and len(parts[0]) == 6:
-        return parts[0], '-'
-    else:
-        return '-'.join(parts[:-1]), parts[-1]
 
-# 应用拆分逻辑
-df[['证券名称', '证券代码']] = df.apply(split_security, axis=1, result_type='expand')
-
-# 输出结果
-print(df[['交易字段', '证券代码', '证券名称']])
 
 # from zvt.domain import StockInstitutionalInvestorHolder
 # entity_ids = ["stock_sz_000338", "stock_sz_000001"]
 # StockInstitutionalInvestorHolder.record_data(entity_ids=entity_ids)
 # df = StockInstitutionalInvestorHolder.query_data(entity_ids=entity_ids)
 # print(df)
+
+import akshare as ak
+
+# 根据股票代码返回市场
+def judge_stock_market(stock_code):
+    if len(stock_code) == 5:
+        return '港股股票'
+    elif stock_code.startswith('6') or\
+            stock_code.startswith('00') or stock_code.startswith('30'):
+        return 'A股股票'
+    elif stock_code.startswith('900'):
+        return 'B股股票'
+    elif stock_code.startswith('5') :
+        return 'A股基金'
+    elif stock_code.startswith('7') :
+        return 'A股新股'
+    else:
+        return '未知类型'
+
+
+import pandas as pd
+data=pd.read_excel('analyze_summary.xlsx', sheet_name="股票持仓历史",header=0,dtype={'证券代码': str})
+codes=data['证券代码'].unique()
+all_stock_hist_df=pd.DataFrame()
+failed_codes = []
+startdate="20070501"
+enddate='20240322'
+
+for stock_code in codes:
+    market=judge_stock_market(stock_code)
+    try:
+        if market=='A股股票':
+            stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=startdate,
+                                               end_date=enddate, adjust="")
+
+        elif market=='B股股票':
+            stock_hist_df = ak.stock_zh_b_daily(symbol='sh'+stock_code, start_date=startdate,
+                                               end_date=enddate, adjust="")
+        elif market=='港股股票':
+            stock_hist_df = ak.stock_hk_hist(symbol=stock_code, period="daily", start_date=startdate,
+                                                end_date=enddate, adjust="")
+        elif market== 'A股新股':
+            stock_hist_df=pd.DataFrame() #ignore 新股
+        else: #缺省值
+            stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=startdate,
+                                               end_date=enddate, adjust="")
+        stock_hist_df['证券代码']=stock_code
+        all_stock_hist_df = pd.concat([all_stock_hist_df, stock_hist_df])
+    except Exception as e:
+        print(f"Failed to process stock code: {stock_code}. Error: {e}")
+        failed_codes.append(stock_code)
+
+# 将DataFrame序列化到pickle文件
+all_stock_hist_df.to_pickle('all_stock_hist_df.pkl')
+
+# 从pickle文件反序列化加载DataFrame
+df_loaded = pd.read_pickle('all_stock_hist_df.pkl')
+print(df_loaded)
+
+
+# import akshare as ak
+# stock_xgsglb_em_df = ak.stock_xgsglb_em(symbol="全部股票")
+# print(stock_xgsglb_em_df)
+# stock_xgsglb_em_df.to_pickle('新股数据.pkl')
+
+# import akshare as ak
+# df=ak.fund_etf_fund_info_em(fund='510050',start_date='20050701',
+#                                                 end_date='20050701')
+# print(df)
+
+# import akshare as ak
+# stock_hist_df = ak.stock_zh_b_daily(symbol='sh900932', start_date='20200701',
+#                                                end_date='20200901', adjust="")
+# print(stock_hist_df)
