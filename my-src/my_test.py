@@ -44,12 +44,43 @@
 # print(stock_xgsglb_em_df)
 # stock_xgsglb_em_df.to_pickle('新股数据.pkl')
 
-import akshare as ak
-df=ak.fund_etf_fund_info_em(fund='150181',start_date='20151231',
-                                                end_date='20160105')
-print(df)
+# import akshare as ak
+# #df=ak.fund_etf_fund_info_em(fund='510050',start_date='20150301',
+# #                                                end_date='20160325')
+#
+# # 这是etf的所有数据，和股票的结构一致
+# df=ak.fund_etf_hist_em(symbol='184691',start_date='20080301',
+#                                                 end_date='20080325')
+# print(df)
+# stock_hist_df = ak.stock_zh_a_hist(symbol='002515', start_date='20200701',
+#                                                 end_date='20200901', adjust="")
+# print(stock_hist_df.columns)
+
+
+#print(ak.fund_graded_fund_info_em(fund='159915'))  #这是获取分级基金的所有历史净值
 
 # import akshare as ak
 # stock_hist_df = ak.stock_zh_b_daily(symbol='sh900932', start_date='20200701',
 #                                                end_date='20200901', adjust="")
 # print(stock_hist_df)
+# import akshare as ak
+# stock_hist_df = ak.stock_zh_a_daily(symbol='of150182', start_date='2015-12-31',
+#                                                 end_date='2016-01-05', adjust="")
+# print(stock_hist_df)
+
+import pandas as pd
+from getStockPriceHistory import StockPriceHistory
+
+# Initialize data at the beginning
+StockPriceHistory.initialize_data(auto_fetch_from_ak=True)
+
+stock_history_df = pd.read_excel('analyze_summary.xlsx', sheet_name="股票持仓历史", header=0, dtype={'证券代码': str})
+stock_history_df['交收日期'] = pd.to_datetime(stock_history_df['交收日期'])
+stock_history_df['当日市值']=0.0
+for index,row in stock_history_df.iterrows():
+    close_price=StockPriceHistory.fetch_stock_close_price(row['证券代码'],row['交收日期'])
+    if close_price is None:
+        stock_history_df.loc[index,'当日市值']=stock_history_df.loc[index,'持股成本'] #取不到市值时用成本价替代
+    else:
+        stock_history_df.loc[index, '当日市值'] =close_price
+stock_history_df.to_excel('tmp_out.xlsx')
