@@ -102,9 +102,9 @@ class AccountSummary:
 
     # 账户在初始20070507时点的资金余额
     INIT_CAPITAL = {  # 20070510时的初始资金余额（不含股票）
-        '国信B股': {'交收日期': '20070507', '累计净转入资金':25000,'资金余额': 0},
-        '国信账户': {'交收日期': '20070507', '累计净转入资金':300000,'资金余额': 45046.37},  # 这是从后续交易中倒推算出来的
-        '国信融资账户': {'交收日期': '20070507', '累计净转入资金':0,'资金余额': 0},
+        '国信B股': {'交收日期': '20070507', '累计净转入资金':25000.0,'资金余额': 0.0},
+        '国信账户': {'交收日期': '20070507', '累计净转入资金':300000.0,'资金余额': 45046.37},  # 这是从后续交易中倒推算出来的
+        '国信融资账户': {'交收日期': '20070507', '累计净转入资金':0.0,'资金余额': 0.0},
     }
 
     def __init__(self):
@@ -140,8 +140,8 @@ class AccountSummary:
                 '账户类型': account,
                 '累计净转入资金':details['累计净转入资金'],
                 '资金余额': details['资金余额'],
-                '记录账户余额': 0,  # 交易文件中记录的账户余额
-                '校验差异': 0  # 校验数据
+                '记录账户余额': 0.0,  # 交易文件中记录的账户余额
+                '校验差异': 0.0  # 校验数据
             })
         return pd.DataFrame(balance_data)
 
@@ -161,18 +161,17 @@ class AccountSummary:
             # 将数据写入Excel文件的不同sheet
             # Format the numbers uniformly as '###,###,###.##'
             # self.balance_history['资金余额'] = self.balance_history['资金余额'].apply(lambda x: '{:.0f}'.format(x))
-            self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False, encoding='GBK')
+            self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False)
 
             # Format the numbers uniformly as '###,###,###.##'
             # self.stockhold_history['持股成本'] = self.stockhold_history['持股成本'].apply(lambda x: '{:.0f}'.format(x))
-            self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False, encoding='GBK')
+            self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False)
 
             # Rename the column '持股成本' to '实现盈亏'
             self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
             # Format the numbers uniformly as '###,###,###.##'
             # self.stock_profit_history['实现盈亏'] = self.stock_profit_history['实现盈亏'].apply(lambda x: '{:.0f}'.format(x))
-            self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False,
-                                               encoding='GBK')
+            self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False)
 
         # 打开已创建的Excel文件设置格式
         wb = load_workbook('analyze_summary.xlsx')

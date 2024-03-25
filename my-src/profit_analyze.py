@@ -225,7 +225,7 @@ def analyze_transactions():
             ))
             max_len = min(max_len, 40)
             worksheet.set_column(idx, idx, max_len)
-    writer.save()
+    writer.close()
 
 
 def get_record_from_holdings(today_holdings, account_type, stock_code):
