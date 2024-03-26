@@ -5,28 +5,28 @@ import pandas as pd
 
 
 class StockPriceHistory:
-    stock_history_df = None  # Initialize data attribute at class definition
+    stock_price_df = None  # Initialize data attribute at class definition
 
     def __init__(self):
         pass
 
     @classmethod
     def initialize_data(cls, auto_fetch_from_ak=False):
-        if cls.stock_history_df is None:
+        if cls.stock_price_df is None:
             if not os.path.exists('stock/all_stock_hist_df.pkl'):
                 if auto_fetch_from_ak:
-                    cls.stock_history_df = cls._fetch_and_cache()
+                    cls.stock_price_df = cls._fetch_and_cache()
             else:
-                cls.stock_history_df = cls.load_from_local('stock/all_stock_hist_df.pkl')
+                cls.stock_price_df = cls.load_from_local('stock/all_stock_hist_df.pkl')
                 # 将“日期”列转换为日期类型
-                cls.stock_history_df['日期'] = pd.to_datetime(cls.stock_history_df['日期'], format='%Y%m%d')
+                cls.stock_price_df['日期'] = pd.to_datetime(cls.stock_price_df['日期'], format='%Y%m%d')
 
     @classmethod
     def fetch_stock_close_price(cls, stock_code, trade_date):
-        if cls.stock_history_df is None:
+        if cls.stock_price_df is None:
             raise ValueError("Data has not been initialized. Call initialize_data first.")
-        result = cls.stock_history_df[
-            (cls.stock_history_df['证券代码'] == stock_code) & (cls.stock_history_df['日期'] == trade_date)]
+        result = cls.stock_price_df[
+            (cls.stock_price_df['证券代码'] == stock_code) & (cls.stock_price_df['日期'] == trade_date)]
         if len(result) == 1:
             return result['收盘'].values[0]
         else:
@@ -66,7 +66,7 @@ class StockPriceHistory:
 
         print(failed_codes)
         # 将“日期”列转换为日期类型
-        cls.stock_history_df['日期'] = pd.to_datetime(cls.stock_history_df['日期'], format='%Y%m%d')
+        cls.stock_price_df['日期'] = pd.to_datetime(cls.stock_price_df['日期'], format='%Y%m%d')
         cls.save_to_local(all_stock_hist_df, 'stock/all_stock_hist_df.pkl')
         return all_stock_hist_df
 
@@ -92,6 +92,7 @@ class StockPriceHistory:
     @classmethod
     def load_from_local(cls, file_name):
         return pd.read_pickle(file_name)
+
 
 
 # Initialize data at the beginning
