@@ -21,7 +21,7 @@
 # ]
 #
 # # 打开CSV文件并读取数据
-# with open('stock-transaction-data200705-2023.csv', 'r') as file:
+# with open('stock-transaction-all-data.csv', 'r') as file:
 #     reader = csv.reader(file)
 #     # 跳过第一行标题
 #     next(reader)

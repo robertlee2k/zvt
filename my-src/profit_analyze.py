@@ -19,7 +19,7 @@ def analyze_transactions():
     # 创建一个字典存储每只股票的交易记录
     stock_transactions = {}
     # 读取CSV文件
-    data = pd.read_csv('stock-transaction-data200705-2023.csv', encoding='GBK')
+    data = pd.read_csv('stock/stock-transaction-all-data.csv', encoding='GBK')
     # 将“交收日期”列转换为日期类型
     data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
 
