@@ -1,5 +1,5 @@
 import pandas as pd
-
+from guoxin import  StockTransHistory
 from gx_summary import SummaryClassifier, AccountSummary
 
 
@@ -18,10 +18,7 @@ def split_security(row):
 def analyze_transactions():
     # 创建一个字典存储每只股票的交易记录
     stock_transactions = {}
-    # 读取CSV文件
-    data = pd.read_csv('stock/stock-transaction-all-data.csv', encoding='GBK')
-    # 将“交收日期”列转换为日期类型
-    data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
+    data = StockTransHistory.load_all_stock_transaction()
 
     # 分拆证券代码和证券名称
     # data['证券代码'] = data['交易证券'].str.extract(r'(\d{6})').fillna('-')
@@ -226,6 +223,8 @@ def analyze_transactions():
             max_len = min(max_len, 40)
             worksheet.set_column(idx, idx, max_len)
     writer.close()
+
+
 
 
 def get_record_from_holdings(today_holdings, account_type, stock_code):
