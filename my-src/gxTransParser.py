@@ -1,6 +1,6 @@
 import pandas as pd
-from guoxin import  StockTransHistory
-from gx_summary import SummaryClassifier, AccountSummary
+from gxTransCrawler import  StockTransHistory
+from gxTransData import SummaryClassifier, AccountSummary
 
 
 # 拆分逻辑：根据空格分隔拆分证券名称和证券代码

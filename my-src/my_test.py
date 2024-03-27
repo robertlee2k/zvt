@@ -69,7 +69,7 @@
 # print(stock_hist_df)
 
 import pandas as pd
-from getStockPriceHistory import StockPriceHistory
+from stockPriceHistory import StockPriceHistory
 from tqdm import tqdm
 
 # Initialize data at the beginning
