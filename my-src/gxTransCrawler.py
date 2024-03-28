@@ -121,7 +121,7 @@ class StockTransHistory:
             if last_completed_date is not None:
                 all_data = pd.read_csv(guoxin_data_file, encoding='GBK')
 
-        last_completed_date+=+ timedelta(days=1)  # 从下一天开始
+        last_completed_date += + timedelta(days=1)  # 从下一天开始
         date_ranges = cls.generate_month_ranges(from_year, end_year, end_month, last_completed_date)
         print(date_ranges)
         # 初始化 Chrome WebDriver

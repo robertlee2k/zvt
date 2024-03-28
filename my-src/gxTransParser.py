@@ -1,5 +1,6 @@
 import pandas as pd
-from gxTransCrawler import  StockTransHistory
+
+from gxTransCrawler import StockTransHistory
 from gxTransData import SummaryClassifier, AccountSummary
 
 
@@ -89,7 +90,7 @@ def analyze_transactions():
                 volume_flag, amount_flag, bank_flag = SummaryClassifier.get_classification(summary)
                 trade_quantity = abs(row['成交数量']) * volume_flag
                 trade_amount = row['发生金额'] * amount_flag
-                bank_flow_amount=row['发生金额'] * bank_flag
+                bank_flow_amount = row['发生金额'] * bank_flag
 
                 transaction = {'summary': summary, 'quantity': trade_quantity, 'amount': trade_amount}
 
@@ -149,7 +150,7 @@ def analyze_transactions():
                 stock_transactions[stock_code]['profit'] += trade_amount
 
                 # 用最新的trade_amount加上该账户的最近一个交易日的账户余额，追加到balance_summary
-                balance_index=today_balance[today_balance['账户类型'] == account_type].index
+                balance_index = today_balance[today_balance['账户类型'] == account_type].index
                 today_balance.loc[balance_index, '资金余额'] += trade_amount
                 today_balance.loc[balance_index, '累计净转入资金'] += bank_flow_amount
                 recorded_balance = row['资金余额']
@@ -223,8 +224,6 @@ def analyze_transactions():
             max_len = min(max_len, 40)
             worksheet.set_column(idx, idx, max_len)
     writer.close()
-
-
 
 
 def get_record_from_holdings(today_holdings, account_type, stock_code):

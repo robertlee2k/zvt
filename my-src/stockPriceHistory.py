@@ -94,7 +94,6 @@ class StockPriceHistory:
         return pd.read_pickle(file_name)
 
 
-
 # Initialize data at the beginning
 StockPriceHistory.initialize_data(auto_fetch_from_ak=True)
 
