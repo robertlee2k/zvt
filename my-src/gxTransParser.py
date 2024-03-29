@@ -1,6 +1,6 @@
 import pandas as pd
 
-from gxTransCrawler import StockTransHistory
+from gxTransHistory import StockTransHistory
 from gxTransData import SummaryClassifier, AccountSummary
 
 
@@ -16,27 +16,23 @@ def split_security(row):
 
 
 # 分析交易流水记录并输出到csv文件
-def analyze_transactions():
+def analyze_transactions(start_date=None):
     # 创建一个字典存储每只股票的交易记录
     stock_transactions = {}
-    data = StockTransHistory.load_all_stock_transaction()
+    # 加载指定日期开始后的交易数据，如果start_date==None 意味着全量计算
+    data = StockTransHistory.load_stock_transactions(start_date)
 
     # 分拆证券代码和证券名称
-    # data['证券代码'] = data['交易证券'].str.extract(r'(\d{6})').fillna('-')
-    # data['证券名称'] = data['交易证券'].str.replace(r'\d', '', regex=True).str.strip().fillna('-')
-    # 应用拆分逻辑
     data[['证券名称', '证券代码']] = data.apply(split_security, axis=1, result_type='expand')
 
-    # 初始化每日持股、每日资金余额数据DataFrame
+    # 初始化每日持股、每日资金余额数据的空DataFrame
     account_summary = AccountSummary()
-    # 初始化每日持股数据:
-    stockhold_summary = account_summary.stockhold_record
-    # 初始化每日资金余额数据:
-    balance_summary = account_summary.balance_record
+    # 初始化每日持股数据, 初始化每日资金余额数据:
+    init_stockhold,init_balance = account_summary.init_start_holdings(start_date)
 
     # 记录初始日期的持仓
-    today_balance = balance_summary.copy()
-    today_holdings = stockhold_summary.copy()
+    today_balance = init_balance.copy()
+    today_holdings = init_stockhold.copy()
 
     # Step 1: Group by '交收日期'
     grouped_by_date = data.groupby('交收日期')
@@ -205,7 +201,7 @@ def analyze_transactions():
         result[-1]['卖出明细'] = sell_details.set_index('summary')['amount'].to_dict()
 
     # 输出每日持仓结果
-    account_summary.save_account_history()
+    account_summary.save_account_history(start_date)
 
     # 将交易结果输出到Excel文件
     result_df = pd.DataFrame(result)
@@ -260,4 +256,4 @@ def insert_or_update_holdings(today_holdings, account_type, trade_date, stock_co
 
 
 if __name__ == "__main__":
-    analyze_transactions()
+    analyze_transactions(start_date=pd.to_datetime('20231125', format='%Y%m%d'))

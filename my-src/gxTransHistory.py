@@ -12,19 +12,28 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+GX_WEB_URL = "https://trade2.guosen.com.cn/trade/views/index.html#/stk/zjlscx"
+CHROMEDRIVER_EXE = "C:/standalone tools/webdrivers/chromedriver.exe"
+CHECKPOINT_FILE = "stock/crawler_last_completed_date.txt"
+
 
 class StockTransHistory:
+    TRANSACTION_ALL_DATA_CSV = 'stock/stock-transaction-all-data.csv'
+    DATACRAWLER_RESULT_CSV = 'stock/guoxin_datacrawler.csv'
 
     def __init__(self):
         pass
 
     @classmethod
-    def load_all_stock_transaction(cls):
+    def load_stock_transactions(cls,start_date=None):
         # 读取CSV文件
-        data = pd.read_csv('stock/stock-transaction-all-data.csv', encoding='GBK')
+        data = pd.read_csv(cls.TRANSACTION_ALL_DATA_CSV, encoding='GBK')
         # 将“交收日期”列转换为日期类型
         data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
+        if start_date:
+            data = data[data['交收日期'] >= pd.to_datetime(start_date)]
         return data
+
 
     @classmethod
     def generate_month_ranges(cls, begin_year, end_year, end_month=None, continue_date=None):
@@ -102,7 +111,7 @@ class StockTransHistory:
     @classmethod
     def read_last_completed_date(cls):
         try:
-            with open("stock/crawler_last_completed_date.txt", "r") as file:
+            with open(CHECKPOINT_FILE, "r") as file:
                 last_date = file.readline()
                 return datetime.strptime(last_date, "%Y-%m-%d") if last_date else None
         except FileNotFoundError:
@@ -110,7 +119,7 @@ class StockTransHistory:
 
     @classmethod
     def write_last_completed_date(cls, date_str):
-        with open("stock/crawler_last_completed_date.txt", "w") as file:
+        with open(CHECKPOINT_FILE, "w") as file:
             file.write(date_str)
 
     @classmethod
@@ -126,10 +135,10 @@ class StockTransHistory:
         print(date_ranges)
         # 初始化 Chrome WebDriver
         # 指定Chrome驱动程序的路径
-        driver_path = "C:/standalone tools/webdrivers/chromedriver.exe"
+        driver_path = CHROMEDRIVER_EXE
         # 启动Chrome浏览器并指定驱动程序路径
         driver = webdriver.Chrome(service=Service(driver_path))
-        driver.get("https://trade2.guosen.com.cn/trade/views/index.html#/stk/zjlscx")  # 替换为目标网页的 URL
+        driver.get(GX_WEB_URL)  # 目标网页的 URL
 
         cls.wait_for_user_trigger()
 
@@ -151,23 +160,47 @@ class StockTransHistory:
         all_data.to_csv(guoxin_data_file, index=False, encoding='GBK')
         print(f"Data scraping completed and saved to {guoxin_data_file}")
 
+    @classmethod
+    def get_data_from_web(cls):
+        data_file = cls.DATACRAWLER_RESULT_CSV
 
-def get_data_from_web():
-    data_file = 'stock/guoxin_datacrawler.csv'
+        all_transaction_df = StockTransHistory.load_stock_transactions()
+        # 获取目前文件中交收日期最晚的日期
+        latest_day = all_transaction_df['交收日期'].max()
+        print("目前文件中交收日期最近的日子:", latest_day.strftime('%Y-%m-%d'))
+        start_year = latest_day.year
+        # 抓取结束日期设为今天之后的31天
+        end_day = datetime.today() + timedelta(days=31)
 
-    all_transaction_df = StockTransHistory.load_all_stock_transaction()
-    # 获取目前文件中交收日期最晚的日期
-    latest_day = all_transaction_df['交收日期'].max()
-    print("目前文件中交收日期最近的日子:", latest_day.strftime('%Y-%m-%d'))
-    start_year = latest_day.year
-    # 抓取结束日期设为今天之后的31天
-    end_day = datetime.today() + timedelta(days=31)
+        cls.crawler(data_file, start_year, end_day.year, end_day.month, latest_day)
 
-    StockTransHistory.crawler(data_file, start_year, end_day.year, end_day.month, latest_day)
+    @classmethod
+    def append_fetchd_data_to_all(cls):
+        """
+        将 DATA_DRAWLER_RESULT_CSV 文件中的数据追加到 TRANSACTION_ALL_DATA_CSV 文件中。
+        """
+        try:
+            # 读取 DATA_DRAWLER_RESULT_CSV 文件
+            new_data = pd.read_csv(cls.DATACRAWLER_RESULT_CSV, encoding='GBK')
 
+            # 读取 TRANSACTION_ALL_DATA_CSV 文件
+            all_data = cls.load_stock_transactions()
+
+            # 将新数据追加到 all_data 中
+            all_data = pd.concat([all_data, new_data], ignore_index=True)
+
+            # 保存更新后的数据到 TRANSACTION_ALL_DATA_CSV 文件
+            all_data.to_csv(cls.TRANSACTION_ALL_DATA_CSV, index=False, encoding='GBK')
+            print(f"Data appended to {cls.TRANSACTION_ALL_DATA_CSV}")
+        except FileNotFoundError:
+            print(f"Error: {cls.DATACRAWLER_RESULT_CSV} file not found.")
+        except Exception as e:
+            print(f"Error appending data: {e}")
 
 if __name__ == "__main__":
-    get_data_from_web()
+    StockTransHistory.get_data_from_web()
+
+    # StockTransHistory.append_fetchd_data_to_all()
 
     # # 测试函数
     # for start, end in generate_month_ranges(2023, 2024, 4, datetime(2023, 11, 24)):

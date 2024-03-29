@@ -91,6 +91,7 @@ class SummaryClassifier:
 
 # 国信证券交易资金流水中的初始持仓
 class AccountSummary:
+    ACCOUNT_SUMMARY_FILE = 'analyze_summary.xlsx'
     # 每只股票在初始20070507时点的初始持仓股数
     INIT_HOLDINGS = {  # 持股成本价以20070507时的不复权股价为计算依据
         '600161': {'交收日期': '20070507', '账户': '国信账户', '证券名称': '天坛生物', '持股数量': 12000, '持股成本价': 20.42},
@@ -111,38 +112,58 @@ class AccountSummary:
         self.stockhold_history = pd.DataFrame()  # 每日持仓历史
         self.balance_history = pd.DataFrame()  # 每日资金余额历史
         self.stock_profit_history = pd.DataFrame()  # 股票实现盈亏历史（不包含浮盈）
+        self.stockhold_record = None
+        self.balance_record = None
 
-        self.stockhold_record = AccountSummary.init_stockhold_record()
-        self.balance_record = AccountSummary.init_balance_record()
+    # 根据传入的起始日期设定当日的初始持仓数据
+    def init_start_holdings(self, start_date=None):
+        self.stockhold_record = AccountSummary.init_stockhold_record(start_date)
+        self.balance_record = AccountSummary.init_balance_record(start_date)
+        return self.stockhold_record, self.balance_record
 
     @staticmethod
-    def init_stockhold_record():
+    def init_stockhold_record(start_date=None):
         # 初始化每日持股数据DataFrame
         stockhold_data = []
-        for code, details in AccountSummary.INIT_HOLDINGS.items():
-            stockhold_data.append({
-                '交收日期': pd.to_datetime(details['交收日期'], format='%Y%m%d'),
-                '账户类型': details['账户'],
-                '证券代码': code,
-                '证券名称': details['证券名称'],
-                '持股数量': details['持股数量'],
-                '持股成本': details['持股数量'] * details['持股成本价']
-            })
+        if start_date is None:  # 从2007年开始的全量数据分析
+            for code, details in AccountSummary.INIT_HOLDINGS.items():
+                stockhold_data.append({
+                    '交收日期': pd.to_datetime(details['交收日期'], format='%Y%m%d'),
+                    '账户类型': details['账户'],
+                    '证券代码': code,
+                    '证券名称': details['证券名称'],
+                    '持股数量': details['持股数量'],
+                    '持股成本': details['持股数量'] * details['持股成本价']
+                })
+        else:  # 从特定日期开始的增量数据分析
+            # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
+            stockhold_history = pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="股票持仓历史", header=0,
+                                              dtype={'证券代码': str})
+            # 找到 start_date 前一天的持仓记录
+            prev_day = start_date - pd.Timedelta(days=1)
+            stockhold_data = stockhold_history[stockhold_history['交收日期'] == prev_day]
         return pd.DataFrame(stockhold_data)
 
     @staticmethod
-    def init_balance_record():
+    def init_balance_record(start_date=None):
         # 初始化每日资金余额数据DataFrame
         balance_data = []
-        for account, details in AccountSummary.INIT_CAPITAL.items():
-            balance_data.append({
-                '交收日期': pd.to_datetime(details['交收日期'], format='%Y%m%d'),
-                '账户类型': account,
-                '累计净转入资金': details['累计净转入资金'],
-                '资金余额': details['资金余额'],
-                '记录账户余额': 0.0,  # 交易文件中记录的账户余额
-                '校验差异': 0.0  # 校验数据
-            })
+        if start_date is None:  # 从2007年开始的全量数据分析
+            for account, details in AccountSummary.INIT_CAPITAL.items():
+                balance_data.append({
+                    '交收日期': pd.to_datetime(details['交收日期'], format='%Y%m%d'),
+                    '账户类型': account,
+                    '累计净转入资金': details['累计净转入资金'],
+                    '资金余额': details['资金余额'],
+                    '记录账户余额': 0.0,  # 交易文件中记录的账户余额
+                    '校验差异': 0.0  # 校验数据
+                })
+        else:  # 从特定日期开始的增量数据分析
+            # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
+            balance_history = pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="账户余额历史", header=0)
+            # 找到 start_date 前一天的持仓记录
+            prev_day = start_date - pd.Timedelta(days=1)
+            balance_data = balance_history[balance_history['交收日期'] == prev_day]
         return pd.DataFrame(balance_data)
 
     def add_to_history(self, new_balance_row, new_holdings):
@@ -155,40 +176,41 @@ class AccountSummary:
         new_profit_records['持股成本'] *= -1
         self.stock_profit_history = pd.concat([self.stock_profit_history, new_profit_records], ignore_index=True)
 
-    def save_account_history(self):
+    def save_account_history(self, start_date=None):
+        self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
         # 创建一个Excel文件
-        with pd.ExcelWriter('analyze_summary.xlsx') as writer:
-            # 将数据写入Excel文件的不同sheet
-            # Format the numbers uniformly as '###,###,###.##'
-            # self.balance_history['资金余额'] = self.balance_history['资金余额'].apply(lambda x: '{:.0f}'.format(x))
-            self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False)
+        if start_date:  # 增量模式
+            with pd.ExcelWriter(AccountSummary.ACCOUNT_SUMMARY_FILE, mode='a', if_sheet_exists='replace') as writer:
+                # 将数据写入Excel文件的不同sheet
+                # Format the numbers uniformly as '###,###,###.##'
+                self.balance_history = self.balance_history[self.balance_history['交收日期'] >= start_date]
+                self.stockhold_history = self.stockhold_history[self.stockhold_history['交收日期'] >= start_date]
+                self.stock_profit_history = self.stock_profit_history[self.stock_profit_history['交收日期'] >= start_date]
 
-            # Format the numbers uniformly as '###,###,###.##'
-            # self.stockhold_history['持股成本'] = self.stockhold_history['持股成本'].apply(lambda x: '{:.0f}'.format(x))
-            self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False)
-
-            # Rename the column '持股成本' to '实现盈亏'
-            self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
-            # Format the numbers uniformly as '###,###,###.##'
-            # self.stock_profit_history['实现盈亏'] = self.stock_profit_history['实现盈亏'].apply(lambda x: '{:.0f}'.format(x))
-            self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False)
+                self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False)
+                self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False)
+                self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False)
+        else:  # 全量从2007年开始分析的模式
+            # 创建一个新的Excel文件
+            with pd.ExcelWriter(AccountSummary.ACCOUNT_SUMMARY_FILE, mode='w', engine='openpyxl') as writer:
+                # 将数据写入Excel文件的不同sheet
+                # Format the numbers uniformly as '###,###,###.##'
+                self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False)
+                self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False)
+                self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False)
 
         # 打开已创建的Excel文件设置格式
-        wb = load_workbook('analyze_summary.xlsx')
+        wb = load_workbook(AccountSummary.ACCOUNT_SUMMARY_FILE)
 
         # 逐一选择三个不同的sheet并设置格式
         for sheet_name in ['账户余额历史', '股票持仓历史', '个股盈亏历史']:
             ws = wb[sheet_name]
-            # # 设置特定列的数字格式为'###,###,###.##'，假设这里是第三列
-            # for cell in ws['C']:
-            #     cell.number_format = numbers.FORMAT_NUMBER_COMMA_SEPARATED1
-
             # 设置日期格式为YYYY/MM/DD
             for cell in ws['A']:
                 cell.number_format = 'YYYY/MM/DD'
 
         # 保存更改后的Excel文件
-        wb.save('analyze_summary.xlsx')
+        wb.save(AccountSummary.ACCOUNT_SUMMARY_FILE)
 
 
 # Example usage

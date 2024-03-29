@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import akshare as ak
@@ -11,15 +12,17 @@ class StockPriceHistory:
         pass
 
     @classmethod
-    def initialize_data(cls, auto_fetch_from_ak=False):
+    def initialize_data(cls, auto_fetch_from_ak=False, start_date=None):
         if cls.stock_price_df is None:
             if not os.path.exists('stock/all_stock_hist_df.pkl'):
                 if auto_fetch_from_ak:
-                    cls.stock_price_df = cls._fetch_and_cache()
+                    cls.stock_price_df = cls._fetch_and_cache(start_date)
             else:
                 cls.stock_price_df = cls.load_from_local('stock/all_stock_hist_df.pkl')
-                # 将“日期”列转换为日期类型
+                # 将"日期"列转换为日期类型
                 cls.stock_price_df['日期'] = pd.to_datetime(cls.stock_price_df['日期'], format='%Y%m%d')
+                if start_date:
+                    cls.stock_price_df = cls.stock_price_df[cls.stock_price_df['日期'] >= pd.to_datetime(start_date)]
 
     @classmethod
     def fetch_stock_close_price(cls, stock_code, trade_date):
@@ -33,13 +36,22 @@ class StockPriceHistory:
             return None
 
     @classmethod
-    def _fetch_and_cache(cls):
+    def _fetch_and_cache(cls, start_date=None):
+        if os.path.exists('stock/all_stock_hist_df.pkl'):
+            all_stock_hist_df = cls.load_from_local('stock/all_stock_hist_df.pkl')
+        else:
+            all_stock_hist_df = pd.DataFrame()
+
+        ##TODO
         stock_history_df = pd.read_excel('analyze_summary.xlsx', sheet_name="股票持仓历史", header=0, dtype={'证券代码': str})
         codes = stock_history_df['证券代码'].unique()
-        all_stock_hist_df = pd.DataFrame()
         failed_codes = []
-        start_date = "20070501"
-        end_date = '20240401'
+        if start_date:
+            start_date = pd.to_datetime(start_date).strftime('%Y%m%d')
+        else:
+            start_date = "20070501"
+        # end_date = '20240401' end日期设为今天的后一天
+        end_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y%m%d')
 
         for stock_code in codes:
             market = cls.judge_stock_market(stock_code)
@@ -59,14 +71,13 @@ class StockPriceHistory:
                                                        end_date=end_date, adjust="")
                 stock_hist_df['证券代码'] = stock_code
                 all_stock_hist_df = pd.concat([all_stock_hist_df, stock_hist_df])
-
             except Exception as e:
                 print(f"Failed to fetch data for stock code: {stock_code}. Error: {e}")
                 failed_codes.append(stock_code)
 
         print(failed_codes)
-        # 将“日期”列转换为日期类型
-        cls.stock_price_df['日期'] = pd.to_datetime(cls.stock_price_df['日期'], format='%Y%m%d')
+        # 将"日期"列转换为日期类型
+        all_stock_hist_df['日期'] = pd.to_datetime(all_stock_hist_df['日期'], format='%Y%m%d')
         cls.save_to_local(all_stock_hist_df, 'stock/all_stock_hist_df.pkl')
         return all_stock_hist_df
 
