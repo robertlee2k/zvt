@@ -9,7 +9,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support import expected_conditions as expect_conditions
 from selenium.webdriver.support.ui import WebDriverWait
 
 GX_WEB_URL = "https://trade2.guosen.com.cn/trade/views/index.html#/stk/zjlscx"
@@ -25,15 +25,15 @@ class StockTransHistory:
         pass
 
     @classmethod
-    def load_stock_transactions(cls,start_date=None):
+    def load_stock_transactions(cls, start_date=None):
         # 读取CSV文件
         data = pd.read_csv(cls.TRANSACTION_ALL_DATA_CSV, encoding='GBK')
-        # 将“交收日期”列转换为日期类型
-        data['交收日期'] = pd.to_datetime(data['交收日期'], format='%Y%m%d')
+        if not pd.api.types.is_datetime64_any_dtype(data['交收日期']):
+            # 将“交收日期”列转换为日期类型
+            data['交收日期'] = pd.to_datetime(data['交收日期'])  # , format='%Y%m%d')
         if start_date:
             data = data[data['交收日期'] >= pd.to_datetime(start_date)]
         return data
-
 
     @classmethod
     def generate_month_ranges(cls, begin_year, end_year, end_month=None, continue_date=None):
@@ -81,7 +81,7 @@ class StockTransHistory:
                 try:
                     # 等待直到“加载更多”按钮可见
                     load_more_button = WebDriverWait(driver, 10).until(
-                        EC.visibility_of_element_located((By.XPATH, "//div[contains(text(),'加载更多')]"))
+                        expect_conditions.visibility_of_element_located((By.XPATH, "//div[contains(text(),'加载更多')]"))
                     )
                     load_more_button.click()
                     time.sleep(2)  # 等待页面加载
@@ -175,16 +175,27 @@ class StockTransHistory:
         cls.crawler(data_file, start_year, end_day.year, end_day.month, latest_day)
 
     @classmethod
-    def append_fetchd_data_to_all(cls):
+    def append_fetched_data_to_all(cls):
         """
         将 DATA_DRAWLER_RESULT_CSV 文件中的数据追加到 TRANSACTION_ALL_DATA_CSV 文件中。
         """
         try:
             # 读取 DATA_DRAWLER_RESULT_CSV 文件
             new_data = pd.read_csv(cls.DATACRAWLER_RESULT_CSV, encoding='GBK')
+            # 将“交收日期”列转换为日期类型
+            new_data['交收日期'] = pd.to_datetime(new_data['交收日期'], format='%Y%m%d')
 
             # 读取 TRANSACTION_ALL_DATA_CSV 文件
             all_data = cls.load_stock_transactions()
+
+            old_data_end_date = all_data['交收日期'].max()
+            new_data_begin_date = new_data['交收日期'].min()
+            print(f"新数据开始于{new_data_begin_date}, 旧数据结束于{old_data_end_date}")
+            # 检查新数据和所有数据是否有重叠
+            if new_data_begin_date < old_data_end_date:
+                # 删除重叠日期记录
+                all_data = all_data[all_data['交收日期'] <= new_data_begin_date]
+                print("重叠日期记录已删除，以防止重复")
 
             # 将新数据追加到 all_data 中
             all_data = pd.concat([all_data, new_data], ignore_index=True)
@@ -197,10 +208,11 @@ class StockTransHistory:
         except Exception as e:
             print(f"Error appending data: {e}")
 
+
 if __name__ == "__main__":
     StockTransHistory.get_data_from_web()
 
-    # StockTransHistory.append_fetchd_data_to_all()
+    StockTransHistory.append_fetched_data_to_all()
 
     # # 测试函数
     # for start, end in generate_month_ranges(2023, 2024, 4, datetime(2023, 11, 24)):

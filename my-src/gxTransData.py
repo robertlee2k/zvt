@@ -180,16 +180,13 @@ class AccountSummary:
         self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
         # 创建一个Excel文件
         if start_date:  # 增量模式
-            with pd.ExcelWriter(AccountSummary.ACCOUNT_SUMMARY_FILE, mode='a', if_sheet_exists='replace') as writer:
+            with pd.ExcelWriter(AccountSummary.ACCOUNT_SUMMARY_FILE, engine='openpyxl',
+                                mode='a', if_sheet_exists='overlay') as writer:
                 # 将数据写入Excel文件的不同sheet
-                # Format the numbers uniformly as '###,###,###.##'
-                self.balance_history = self.balance_history[self.balance_history['交收日期'] >= start_date]
-                self.stockhold_history = self.stockhold_history[self.stockhold_history['交收日期'] >= start_date]
-                self.stock_profit_history = self.stock_profit_history[self.stock_profit_history['交收日期'] >= start_date]
+                self.append_data_to_sheet(writer, '账户余额历史', self.balance_history, start_date)
+                self.append_data_to_sheet(writer, '股票持仓历史', self.stockhold_history, start_date)
+                self.append_data_to_sheet(writer, '个股盈亏历史', self.stock_profit_history, start_date)
 
-                self.balance_history.to_excel(writer, sheet_name='账户余额历史', index=False)
-                self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False)
-                self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False)
         else:  # 全量从2007年开始分析的模式
             # 创建一个新的Excel文件
             with pd.ExcelWriter(AccountSummary.ACCOUNT_SUMMARY_FILE, mode='w', engine='openpyxl') as writer:
@@ -212,19 +209,27 @@ class AccountSummary:
         # 保存更改后的Excel文件
         wb.save(AccountSummary.ACCOUNT_SUMMARY_FILE)
 
+    # 在已有的excel文件指定sheet日期之后追加新的增量数据
+    @staticmethod
+    def append_data_to_sheet(writer, sheet_name, df_new_data, start_date):
+        # 确保新数据只有start_date之后的
+        df_new_data = df_new_data[df_new_data['交收日期'] >= start_date]
+        # 加载已有的数据
+        df_old_data = pd.DataFrame(pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name=sheet_name))
+        df_old_data['交收日期'] = pd.to_datetime(df_old_data['交收日期'])
+        # 将数据df_new_data写入excel中的sheet表,从start_date之后的第一个行开始覆盖/追加写：
+        skip_rows = df_old_data[df_old_data['交收日期'] < start_date].shape[0]
+        df_new_data.to_excel(writer, sheet_name=sheet_name, startrow=skip_rows + 1, index=False, header=False)
+
 
 # Example usage
 if __name__ == "__main__":
-    summary = 'Tn证券买入'
-    volume_flag, amount_flag = SummaryClassifier.get_classification(summary)
-    if volume_flag is not None:
-        print(f"Summary: {summary}, 成交数量标志: {volume_flag}, 发生金额标志: {amount_flag}")
-    else:
-        print(f"Summary: {summary} not found.")
-
     # 使用示例
     account_summary = AccountSummary()
-    print("每日持股数据:")
-    print(account_summary.stockhold_record)
-    print("\n每日资金余额数据:")
-    print(account_summary.balance_record)
+    # 初始化持股数据, 初始化资金余额数据:
+    startDate = pd.to_datetime('20231124', format='%Y%m%d')
+    init_stockhold, init_balance = account_summary.init_start_holdings(startDate)
+    print(f"{startDate}持股数据:")
+    print(init_stockhold)
+    print("\n{start_date}资金余额数据:")
+    print(init_balance)
