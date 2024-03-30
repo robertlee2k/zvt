@@ -28,7 +28,7 @@ def analyze_transactions(start_date=None):
     # 初始化每日持股、每日资金余额数据的空DataFrame
     account_summary = AccountSummary()
     # 初始化每日持股数据, 初始化每日资金余额数据:
-    init_stockhold,init_balance = account_summary.init_start_holdings(start_date)
+    init_stockhold, init_balance = account_summary.init_start_holdings(start_date)
 
     # 记录初始日期的持仓
     today_balance = init_balance.copy()
