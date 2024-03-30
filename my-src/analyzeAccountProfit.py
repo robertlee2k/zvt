@@ -6,11 +6,12 @@ from gxTransData import AccountSummary
 
 
 # 计算当日市值
-def cal_market_value(stock_holding_records):
+def cal_market_value(stock_holding_records, start_date):
     stock_holding_records['交收日期'] = pd.to_datetime(stock_holding_records['交收日期'])
     stock_holding_records['当日市值'] = 0.0
+    stock_price_df = StockPriceHistory().get_stock_price_df(start_date)
     # Perform inner join on '证券代码' and '交收日期'
-    merged_df = pd.merge(stock_holding_records, StockPriceHistory.stock_price_df[['证券代码', '日期', '收盘']], how='left',
+    merged_df = pd.merge(stock_holding_records, stock_price_df[['证券代码', '日期', '收盘']], how='left',
                          left_on=['证券代码', '交收日期'], right_on=['证券代码', '日期'])
     print(merged_df)
     # Update '当日市值' based on fetched close prices
@@ -48,31 +49,13 @@ def visualize_profit(df_total_profit):
     plt.show()
 
 
-def load_data(data_path, start_date=None):
-    """
-    Load data from 'analyze_summary.xlsx'.
-    If start_date is provided, only load data from that date onwards.
-    """
-    stock_holding_records = pd.read_excel(data_path, sheet_name="股票持仓历史", header=0, dtype={'证券代码': str})
-    account_balance_records = pd.read_excel(data_path, sheet_name="账户余额历史", header=0)
+def analyze(start_date=None):
+    # Load data from AccountSummary
+    stock_holding_records, account_balance_records = AccountSummary().load_account_summaries(start_date)
 
-    if start_date:
-        stock_holding_records = stock_holding_records[stock_holding_records['交收日期'] >= start_date]
-        account_balance_records = account_balance_records[account_balance_records['交收日期'] >= start_date]
-
-    return stock_holding_records, account_balance_records
-
-
-def analyze(data_path, start_date=None):
-    # Initialize data at the beginning
-    StockPriceHistory.get_stock_price_df(auto_fetch_from_ak=True)
-
-    # Load data from 'analyze_summary.xlsx'
-    stock_holding_records, account_balance_records = load_data(data_path, start_date)
-
-    df_market_value = cal_market_value(stock_holding_records)
+    df_market_value = cal_market_value(stock_holding_records, start_date)
     df_total_profit = cal_account_profit(df_market_value, account_balance_records)
     visualize_profit(df_total_profit)
 
 
-analyze(AccountSummary.ACCOUNT_SUMMARY_FILE, start_date=pd.to_datetime('20231125', format='%Y%m%d'))
+analyze()  # start_date=pd.to_datetime('20231125', format='%Y%m%d'))

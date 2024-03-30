@@ -21,6 +21,7 @@ class SummaryClassifier:
         '利息归本': {'成交数量标志': -1, '发生金额标志': 1},
         '利息税代扣': {'成交数量标志': 1, '发生金额标志': 1},
         '基金申购拨出': {'成交数量标志': 1, '发生金额标志': 1},
+        '分级基金上折': {'成交数量标志': 1, '发生金额标志': 1},  # 为军工分级手工创建的记录
         '开放基金拆分减股': {'成交数量标志': -1, '发生金额标志': 1},
         '开放基金拆分增股': {'成交数量标志': 1, '发生金额标志': 1},
         '手续费多退少补取': {'成交数量标志': 1, '发生金额标志': 1},
@@ -50,7 +51,7 @@ class SummaryClassifier:
         '融资平仓': {'成交数量标志': -1, '发生金额标志': 1},
         '融资开仓': {'成交数量标志': 1, '发生金额标志': 1},
         '融资还款': {'成交数量标志': 0, '发生金额标志': 1, '银行标志': 1},
-        '要约资金': {'成交数量标志': 0, '发生金额标志': 1},
+        '要约资金': {'成交数量标志': -1, '发生金额标志': 1},  # 爱建要约卖出
         '证券买入': {'成交数量标志': 1, '发生金额标志': 1},
         '证券卖出': {'成交数量标志': -1, '发生金额标志': 1},
         '证券转银行': {'成交数量标志': 1, '发生金额标志': 1, '银行标志': 1},
@@ -136,7 +137,7 @@ class AccountSummary:
                     '持股成本': details['持股数量'] * details['持股成本价']
                 })
         else:  # 从特定日期开始的增量数据分析
-            stockhold_history = AccountSummary.load_stockhold_history()
+            stockhold_history = AccountSummary.load_stockhold_from_file()
             # 找到 start_date 前一天的持仓记录
             prev_day = start_date - pd.Timedelta(days=1)
             stockhold_data = stockhold_history[stockhold_history['交收日期'] == prev_day]
@@ -157,7 +158,7 @@ class AccountSummary:
                     '校验差异': 0.0  # 校验数据
                 })
         else:  # 从特定日期开始的增量数据分析
-            balance_history = AccountSummary.load_balance_history()
+            balance_history = AccountSummary.load_balance_from_file()
             # 找到 start_date 前一天的持仓记录
             prev_day = start_date - pd.Timedelta(days=1)
             balance_data = balance_history[balance_history['交收日期'] == prev_day]
@@ -165,14 +166,28 @@ class AccountSummary:
 
     # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
     @staticmethod
-    def load_stockhold_history():
+    def load_stockhold_from_file():
         return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="股票持仓历史", header=0,
                              dtype={'证券代码': str})
 
     # 从 'analyze_summary.xlsx' 文件中加载历史的账户余额记录
     @staticmethod
-    def load_balance_history():
+    def load_balance_from_file():
         return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="账户余额历史", header=0)
+
+    def load_account_summaries(self, start_date=None):
+        """
+        Load data from 'analyze_summary.xlsx'.
+        If start_date is provided, only load data from that date onwards.
+        """
+        stock_holding_records = self.load_stockhold_from_file()
+        account_balance_records = self.load_balance_from_file()
+
+        if start_date:
+            stock_holding_records = stock_holding_records[stock_holding_records['交收日期'] >= start_date]
+            account_balance_records = account_balance_records[account_balance_records['交收日期'] >= start_date]
+
+        return stock_holding_records, account_balance_records
 
     def add_to_history(self, new_balance_row, new_holdings):
         self.balance_history = pd.concat([self.balance_history, new_balance_row], ignore_index=True)

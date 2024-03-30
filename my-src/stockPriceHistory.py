@@ -42,7 +42,7 @@ class StockPriceHistory:
 
         # 获取持仓股票的收盘价
         # 获取每日持股数据
-        stock_trans_df = AccountSummary.load_stockhold_history()
+        stock_trans_df = AccountSummary.load_stockhold_from_file()
 
         if start_date is None:  # 开始日期为空，则从20070501开始
             start_date = pd.to_datetime("20070501")

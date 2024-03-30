@@ -129,14 +129,18 @@ def analyze_transactions(start_date=None):
                                 today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
                                                                            stock_code,
                                                                            stock_name, cost, trade_quantity)
-                    else:  # 不需要特殊处理的
-                        cost = trade_amount
-                        # 融资借款 和融资还款这种只有发生金额没有成交价格的在持股成本计算时要忽略
-                        if summary == '融资借款' or summary == '融资还款':
-                            cost = 0
-                        today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
-                                                                   stock_code,
-                                                                   stock_name, cost, trade_quantity)
+                    else:  # 不是成对出现的交易，不需要特殊处理的
+                        if summary == '股份转出' or summary == '股份转入':
+                            pass  # 这个本质上相当于临时冻结股票（特殊情况的融资，或者要约收购），忽略，否则市值计算有问题
+                        else:
+                            cost = trade_amount
+                            # 融资借款 和融资还款这种只有发生金额没有成交价格的在持股成本计算时要忽略
+                            if summary == '融资借款' or summary == '融资还款':
+                                cost = 0
+
+                            today_holdings = insert_or_update_holdings(today_holdings, account_type, trade_date,
+                                                                       stock_code,
+                                                                       stock_name, cost, trade_quantity)
 
                 if volume_flag == 1:
                     stock_transactions[stock_code]['buy'].append(transaction)
@@ -256,4 +260,4 @@ def insert_or_update_holdings(today_holdings, account_type, trade_date, stock_co
 
 
 if __name__ == "__main__":
-    analyze_transactions(start_date=pd.to_datetime('20231125', format='%Y%m%d'))
+    analyze_transactions()  # start_date=pd.to_datetime('20231125', format='%Y%m%d'))
