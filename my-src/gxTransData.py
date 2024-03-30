@@ -136,9 +136,7 @@ class AccountSummary:
                     '持股成本': details['持股数量'] * details['持股成本价']
                 })
         else:  # 从特定日期开始的增量数据分析
-            # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
-            stockhold_history = pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="股票持仓历史", header=0,
-                                              dtype={'证券代码': str})
+            stockhold_history = AccountSummary.load_stockhold_history()
             # 找到 start_date 前一天的持仓记录
             prev_day = start_date - pd.Timedelta(days=1)
             stockhold_data = stockhold_history[stockhold_history['交收日期'] == prev_day]
@@ -159,12 +157,22 @@ class AccountSummary:
                     '校验差异': 0.0  # 校验数据
                 })
         else:  # 从特定日期开始的增量数据分析
-            # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
-            balance_history = pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="账户余额历史", header=0)
+            balance_history = AccountSummary.load_balance_history()
             # 找到 start_date 前一天的持仓记录
             prev_day = start_date - pd.Timedelta(days=1)
             balance_data = balance_history[balance_history['交收日期'] == prev_day]
         return pd.DataFrame(balance_data)
+
+    # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
+    @staticmethod
+    def load_stockhold_history():
+        return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="股票持仓历史", header=0,
+                             dtype={'证券代码': str})
+
+    # 从 'analyze_summary.xlsx' 文件中加载历史的账户余额记录
+    @staticmethod
+    def load_balance_history():
+        return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="账户余额历史", header=0)
 
     def add_to_history(self, new_balance_row, new_holdings):
         self.balance_history = pd.concat([self.balance_history, new_balance_row], ignore_index=True)

@@ -4,6 +4,7 @@ import pandas as pd
 from stockPriceHistory import StockPriceHistory
 from gxTransData import AccountSummary
 
+
 # 计算当日市值
 def cal_market_value(stock_holding_records):
     stock_holding_records['交收日期'] = pd.to_datetime(stock_holding_records['交收日期'])
@@ -64,7 +65,7 @@ def load_data(data_path, start_date=None):
 
 def analyze(data_path, start_date=None):
     # Initialize data at the beginning
-    StockPriceHistory.initialize_data(auto_fetch_from_ak=True)
+    StockPriceHistory.get_stock_price_df(auto_fetch_from_ak=True)
 
     # Load data from 'analyze_summary.xlsx'
     stock_holding_records, account_balance_records = load_data(data_path, start_date)
