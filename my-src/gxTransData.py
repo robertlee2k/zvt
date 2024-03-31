@@ -134,7 +134,9 @@ class AccountSummary:
                     '证券代码': code,
                     '证券名称': details['证券名称'],
                     '持股数量': details['持股数量'],
-                    '持股成本': details['持股数量'] * details['持股成本价']
+                    '持股成本': details['持股数量'] * details['持股成本价'],
+                    '当日市值': 0.0,
+                    '浮动盈亏': 0.0
                 })
         else:  # 从特定日期开始的增量数据分析
             stockhold_history = AccountSummary.load_stockhold_from_file()
@@ -155,7 +157,9 @@ class AccountSummary:
                     '累计净转入资金': details['累计净转入资金'],
                     '资金余额': details['资金余额'],
                     '记录账户余额': 0.0,  # 交易文件中记录的账户余额
-                    '校验差异': 0.0  # 校验数据
+                    '校验差异': 0.0,  # 校验数据
+                    '当日市值': 0.0,
+                    '盈亏': 0.0
                 })
         else:  # 从特定日期开始的增量数据分析
             balance_history = AccountSummary.load_balance_from_file()
@@ -175,6 +179,7 @@ class AccountSummary:
     def load_balance_from_file():
         return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="账户余额历史", header=0)
 
+    # 加载每日持股记录和账户数据
     def load_account_summaries(self, start_date=None):
         """
         Load data from 'analyze_summary.xlsx'.
@@ -200,7 +205,10 @@ class AccountSummary:
         self.stock_profit_history = pd.concat([self.stock_profit_history, new_profit_records], ignore_index=True)
 
     def save_account_history(self, start_date=None):
+        # 个股盈亏数据的重命名
         self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
+        self.stock_profit_history = self.stock_profit_history[['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '实现盈亏']]
+
         # 创建一个Excel文件
         if start_date:  # 增量模式
             with pd.ExcelWriter(AccountSummary.ACCOUNT_SUMMARY_FILE, engine='openpyxl',
@@ -219,16 +227,19 @@ class AccountSummary:
                 self.stockhold_history.to_excel(writer, sheet_name='股票持仓历史', index=False)
                 self.stock_profit_history.to_excel(writer, sheet_name='个股盈亏历史', index=False)
 
+        self.format_account_summary_file()
+
+    # 设置格式
+    @staticmethod
+    def format_account_summary_file():
         # 打开已创建的Excel文件设置格式
         wb = load_workbook(AccountSummary.ACCOUNT_SUMMARY_FILE)
-
         # 逐一选择三个不同的sheet并设置格式
         for sheet_name in ['账户余额历史', '股票持仓历史', '个股盈亏历史']:
             ws = wb[sheet_name]
             # 设置日期格式为YYYY/MM/DD
             for cell in ws['A']:
                 cell.number_format = 'YYYY/MM/DD'
-
         # 保存更改后的Excel文件
         wb.save(AccountSummary.ACCOUNT_SUMMARY_FILE)
 

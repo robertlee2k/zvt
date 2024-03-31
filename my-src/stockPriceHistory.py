@@ -5,7 +5,8 @@ import pandas as pd
 from datetime import timedelta
 from gxTransData import AccountSummary
 
-ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl'
+ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl' # 所有股票价格
+HGT_EXCHANGE_RATE_FILE = 'stock/hgt_exchange_rate.pkl'  # 沪港通结算汇率
 
 
 class StockPriceHistory:
@@ -74,6 +75,7 @@ class StockPriceHistory:
 
         # 将"日期"列转换为日期类型
         all_stock_hist_df['日期'] = pd.to_datetime(all_stock_hist_df['日期'])
+
         self.save_to_local(all_stock_hist_df, ALL_STOCK_HIST_DF_PKL)
         return all_stock_hist_df, failed_codes
 
@@ -135,20 +137,36 @@ class StockPriceHistory:
 
     @staticmethod
     def save_to_local(data_frame, file_name):
+        # 检查stock_price_df中的重复数据，并删除
+        duplicate_rows = data_frame[data_frame.duplicated()]
+        print("删除以下重复数据行:")
+        print(duplicate_rows)
+        data_frame=data_frame.drop_duplicates()
         data_frame.to_pickle(file_name)
 
     @staticmethod
     def load_from_local(file_name):
         return pd.read_pickle(file_name)
 
+    @staticmethod
+    def cache_exchange_rate_from_ak():
+        # 获取所有沪港通结算汇率数据并保存到文件里
+        stock_sgt_settlement_exchange_rate_sse_df = ak.stock_sgt_settlement_exchange_rate_sse()
+        stock_sgt_settlement_exchange_rate_sse_df.rename(columns={'适用日期': '交收日期'}, inplace=True)
+        print(stock_sgt_settlement_exchange_rate_sse_df)
+
+        stock_sgt_settlement_exchange_rate_sse_df.to_pickle(HGT_EXCHANGE_RATE_FILE)
+
+    @staticmethod
+    def load_exchange_rate():
+        return pd.read_pickle(HGT_EXCHANGE_RATE_FILE)
 
 # Example usage
 if __name__ == "__main__":
     # 使用示例
-    # 初始化持股数据, 初始化资金余额数据:
-    startDate = pd.to_datetime('20080221', format='%Y%m%d')
+    startDate = pd.to_datetime('20240321', format='%Y%m%d')
+    # df, failed = StockPriceHistory().fetch_close_price_from_ak(startDate)
+    # print(df)
+    # print(failed)
 
-    # Initialize data at the beginning
-    df, failed = StockPriceHistory().fetch_close_price_from_ak()
-    print(df)
-    print(failed)
+    StockPriceHistory().cache_exchange_rate_from_ak()
