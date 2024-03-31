@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import timedelta
 from gxTransData import AccountSummary
 
-ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl' # 所有股票价格
+ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl'  # 所有股票价格
 HGT_EXCHANGE_RATE_FILE = 'stock/hgt_exchange_rate.pkl'  # 沪港通结算汇率
 
 
@@ -41,6 +41,9 @@ class StockPriceHistory:
         else:
             all_stock_hist_df = pd.DataFrame()
 
+        # 再保存港股通结算汇率
+        exchange_rate_df = self.cache_exchange_rate_from_ak()
+
         # 获取持仓股票的收盘价
         # 获取每日持股数据
         stock_trans_df = AccountSummary.load_stockhold_from_file()
@@ -64,7 +67,7 @@ class StockPriceHistory:
             print(f"{range_start.strftime('%Y%m%d')}, {range_end.strftime('%Y%m%d'):}")
             print(codes)
             for stock_code in codes:
-                stock_hist_df = self.query_akshare(stock_code, range_start, range_end)
+                stock_hist_df = self.query_akshare(stock_code, range_start, range_end, exchange_rate_df)
                 if stock_hist_df is None:
                     failed_codes.append(stock_code)
                 else:  # 将查询数据拼接
@@ -76,11 +79,14 @@ class StockPriceHistory:
         # 将"日期"列转换为日期类型
         all_stock_hist_df['日期'] = pd.to_datetime(all_stock_hist_df['日期'])
 
+        # 重新设置index
+        all_stock_hist_df.reset_index(drop=True,inplace=True)
         self.save_to_local(all_stock_hist_df, ALL_STOCK_HIST_DF_PKL)
+
         return all_stock_hist_df, failed_codes
 
     # 调用akshare接口
-    def query_akshare(self, stock_code, from_date, to_date):
+    def query_akshare(self, stock_code, from_date, to_date, exchange_rate_df):
         stock_hist_df = None
         market = self.judge_stock_market(stock_code)
         # 转换为akshare所需的字符串形式
@@ -95,15 +101,19 @@ class StockPriceHistory:
             elif market == '港股股票':
                 stock_hist_df = ak.stock_hk_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                  end_date=end_date, adjust="")
+                stock_hist_df['日期'] = pd.to_datetime(stock_hist_df['日期'])
+                stock_hist_df = pd.merge(stock_hist_df, exchange_rate_df, how='left', on=['日期'])
+                stock_hist_df['收盘'] = stock_hist_df['收盘'] * stock_hist_df['卖出结算汇兑比率']
+                stock_hist_df = stock_hist_df[
+                    ['日期', '收盘']]  # .drop(['买入结算汇兑比率','卖出结算汇兑比率','货币种类'], axis=1, inplace=True)
+
             elif market == 'A股新股':
                 stock_hist_df = pd.DataFrame()  # ignore 新股
             else:  # Default to A股股票
-                stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date,
-                                                   end_date=end_date, adjust="")
+                stock_hist_df = pd.DataFrame()  # ignore
             stock_hist_df['证券代码'] = stock_code
         except Exception as e:
-            # print(f"Failed to fetch data for stock code: {stock_code}. Error: {e}")
-            pass
+            print(f"Failed to fetch data for stock code: {stock_code}. Error: {e}")
 
         return stock_hist_df
 
@@ -141,7 +151,7 @@ class StockPriceHistory:
         duplicate_rows = data_frame[data_frame.duplicated()]
         print("删除以下重复数据行:")
         print(duplicate_rows)
-        data_frame=data_frame.drop_duplicates()
+        data_frame = data_frame.drop_duplicates()
         data_frame.to_pickle(file_name)
 
     @staticmethod
@@ -152,21 +162,27 @@ class StockPriceHistory:
     def cache_exchange_rate_from_ak():
         # 获取所有沪港通结算汇率数据并保存到文件里
         stock_sgt_settlement_exchange_rate_sse_df = ak.stock_sgt_settlement_exchange_rate_sse()
-        stock_sgt_settlement_exchange_rate_sse_df.rename(columns={'适用日期': '交收日期'}, inplace=True)
+        stock_sgt_settlement_exchange_rate_sse_df.rename(columns={'适用日期': '日期'}, inplace=True)
+        stock_sgt_settlement_exchange_rate_sse_df['日期'] = pd.to_datetime(
+            stock_sgt_settlement_exchange_rate_sse_df['日期'])
         print(stock_sgt_settlement_exchange_rate_sse_df)
-
         stock_sgt_settlement_exchange_rate_sse_df.to_pickle(HGT_EXCHANGE_RATE_FILE)
+        return stock_sgt_settlement_exchange_rate_sse_df
 
     @staticmethod
-    def load_exchange_rate():
+    def load_exchange_rate_df():
         return pd.read_pickle(HGT_EXCHANGE_RATE_FILE)
+
+
+def run_update_ak():
+    start_date = pd.to_datetime('20240321', format='%Y%m%d')
+    stock_price = StockPriceHistory()
+    df, failed = stock_price.fetch_close_price_from_ak() #start_date)
+    print(df)
+    print(failed)
+
 
 # Example usage
 if __name__ == "__main__":
     # 使用示例
-    startDate = pd.to_datetime('20240321', format='%Y%m%d')
-    # df, failed = StockPriceHistory().fetch_close_price_from_ak(startDate)
-    # print(df)
-    # print(failed)
-
-    StockPriceHistory().cache_exchange_rate_from_ak()
+    run_update_ak()
