@@ -158,8 +158,8 @@ class AccountSummary:
                     '资金余额': details['资金余额'],
                     '记录账户余额': 0.0,  # 交易文件中记录的账户余额
                     '校验差异': 0.0,  # 校验数据
+                    '盈亏': 0.0, #盈亏放前面，以免analyzeAccountProfit时错位
                     '当日市值': 0.0,
-                    '盈亏': 0.0
                 })
         else:  # 从特定日期开始的增量数据分析
             balance_history = AccountSummary.load_balance_from_file()
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     # 使用示例
     account_summary = AccountSummary()
     # 初始化持股数据, 初始化资金余额数据:
-    startDate = pd.to_datetime('20231124', format='%Y%m%d')
+    startDate = None # pd.to_datetime('20231124', format='%Y%m%d')
     init_stockhold, init_balance = account_summary.init_start_holdings(startDate)
     print(f"{startDate}持股数据:")
     print(init_stockhold)

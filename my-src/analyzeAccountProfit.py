@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from stockPriceHistory import StockPriceHistory
 from gxTransData import AccountSummary
+from stockPriceHistory import StockPriceHistory
 
 
 # 计算股票当日市值
@@ -21,7 +21,7 @@ def cal_market_value(stock_holding_records, start_date):
                                         axis=1)
     merged_df['浮动盈亏'] = merged_df['当日市值'] - merged_df['持股成本']
 
-    merged_df = merged_df[['交收日期', '账户类型','证券代码', '证券名称', '持股数量', '持股成本', '当日市值', '浮动盈亏']]
+    merged_df = merged_df[['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '持股成本', '当日市值', '浮动盈亏']]
     return merged_df
 
 
@@ -34,11 +34,16 @@ def cal_account_profit(df_market_value, account_balance_records):
     account_balance_records.drop('当日市值', axis=1, inplace=True)
 
     df_account_profit = pd.merge(account_balance_records, df_sum, how='left', on=['交收日期', '账户类型'])
-    df_account_profit['当日市值'].fillna(0.0, inplace=True)
+    df_account_profit['当日市值'] = df_account_profit['当日市值'].fillna(0.0)
     df_account_profit['盈亏'] = df_account_profit['资金余额'] + df_account_profit['当日市值'] - df_account_profit['累计净转入资金']
     print(df_account_profit)
-    df_total_profit = df_account_profit.groupby(['交收日期'])['盈亏'].sum().reset_index()
+    df_total_profit = calcu_total_profit(df_account_profit)
     return df_total_profit, df_account_profit
+
+
+def calcu_total_profit(df_account_profit):
+    df_total_profit = df_account_profit.groupby(['交收日期'])['盈亏'].sum().reset_index()
+    return df_total_profit
 
 
 def visualize_profit(df_total_profit):
@@ -78,7 +83,16 @@ def analyze(start_date=None):
     # 设置数据格式
     account_summary.format_account_summary_file()
 
+
+def run():
+    start_date = None #pd.to_datetime('20231125', format='%Y%m%d')
+    analyze(start_date)  #
+    account_summary = AccountSummary()
+    # Load data from AccountSummary
+    stock_holding_records, df_account_profit = account_summary.load_account_summaries(start_date)
+    df_total_profit = calcu_total_profit(df_account_profit)
     visualize_profit(df_total_profit)
 
 
-analyze()  # start_date=pd.to_datetime('20231125', format='%Y%m%d'))
+if __name__ == "__main__":
+    run()
