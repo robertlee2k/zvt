@@ -210,7 +210,7 @@ class StockTransHistory:
 
 
 if __name__ == "__main__":
-    #StockTransHistory.get_data_from_web()
+    StockTransHistory.get_data_from_web()
 
     StockTransHistory.append_fetched_data_to_all()
 

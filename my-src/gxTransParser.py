@@ -260,4 +260,4 @@ def insert_or_update_holdings(today_holdings, account_type, trade_date, stock_co
 
 
 if __name__ == "__main__":
-    analyze_transactions()  # start_date=pd.to_datetime('20231125', format='%Y%m%d'))
+    analyze_transactions(start_date=pd.to_datetime('20230225', format='%Y%m%d'))
