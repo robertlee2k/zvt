@@ -67,7 +67,7 @@ def analyze(start_date=None):
     # Load data from AccountSummary
     stock_holding_records, account_balance_records = account_summary.load_account_summaries(start_date)
 
-    # 获取股票的market_valeu
+    # 获取股票的market_value
     df_market_value = cal_market_value(stock_holding_records, start_date)
 
     df_total_profit, df_account_profit = cal_account_profit(df_market_value, account_balance_records)

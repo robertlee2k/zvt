@@ -175,7 +175,7 @@ class StockPriceHistory:
 
 
 def run_update_ak():
-    start_date = pd.to_datetime('20240321', format='%Y%m%d')
+    start_date = None #pd.to_datetime('20240321', format='%Y%m%d')
     stock_price = StockPriceHistory()
     df, failed = stock_price.fetch_close_price_from_ak(start_date)
     print(df)

@@ -261,7 +261,7 @@ if __name__ == "__main__":
     # 使用示例
     account_summary = AccountSummary()
     # 初始化持股数据, 初始化资金余额数据:
-    startDate = None # pd.to_datetime('20231124', format='%Y%m%d')
+    startDate = pd.to_datetime('20231124', format='%Y%m%d')
     init_stockhold, init_balance = account_summary.init_start_holdings(startDate)
     print(f"{startDate}持股数据:")
     print(init_stockhold)
