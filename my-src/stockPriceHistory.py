@@ -7,7 +7,7 @@ from gxTransData import AccountSummary
 
 ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl'  # 所有股票价格
 HGT_EXCHANGE_RATE_FILE = 'stock/hgt_exchange_rate.pkl'  # 沪港通结算汇率
-
+TRADE_DATES = 'stock/trade_dates.pkl'  # 交易日
 
 class StockPriceHistory:
 
@@ -173,6 +173,16 @@ class StockPriceHistory:
     def load_exchange_rate_df():
         return pd.read_pickle(HGT_EXCHANGE_RATE_FILE)
 
+    @staticmethod
+    def cache_trade_dates():
+        tool_trade_date_hist_sina_df = ak.tool_trade_date_hist_sina()
+        tool_trade_date_hist_sina_df['trade_date']=pd.to_datetime(tool_trade_date_hist_sina_df['trade_date'])
+        print(tool_trade_date_hist_sina_df)
+        tool_trade_date_hist_sina_df.to_pickle(TRADE_DATES)
+
+    @staticmethod
+    def load_trade_dates():
+        return pd.read_pickle(TRADE_DATES)
 
 def run_update_ak():
     start_date = None #pd.to_datetime('20240321', format='%Y%m%d')
@@ -184,5 +194,5 @@ def run_update_ak():
 
 # Example usage
 if __name__ == "__main__":
-    # 使用示例
-    run_update_ak()
+    # run_update_ak()
+    StockPriceHistory.cache_trade_dates()
