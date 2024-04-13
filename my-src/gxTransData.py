@@ -179,7 +179,7 @@ class AccountSummary:
     def load_balance_from_file():
         return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="账户余额历史", header=0)
 
-    # 加载每日持股记录和账户数据
+    # 从文件中加载每日持股记录和账户数据
     def load_account_summaries(self, start_date=None):
         """
         Load data from 'analyze_summary.xlsx'.
