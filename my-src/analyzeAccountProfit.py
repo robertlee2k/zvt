@@ -92,7 +92,7 @@ def analyze(start_date=None):
 def simulate(checkpoint_date):
     sim_stock_holding_records, sim_account_balance_records = get_sim_account_history(checkpoint_date)
     # 获取股票后复权信息
-    stock_price_df = StockPriceHistory().fetch_hfq_price_from_ak(sim_stock_holding_records, checkpoint_date)
+    stock_price_df = StockPriceHistory().calcu_hfq_price(sim_stock_holding_records, checkpoint_date)
     # 获取股票的market_value
     df_market_value = cal_market_value(sim_stock_holding_records, stock_price_df, checkpoint_date)
     df_total_profit, df_account_profit = cal_account_profit(df_market_value, sim_account_balance_records)

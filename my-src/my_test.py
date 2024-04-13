@@ -68,3 +68,7 @@
 #                                                 end_date='2016-01-05', adjust="")
 # print(stock_hist_df)
 
+import akshare as ak
+
+qfq_factor_df = ak.stock_zh_a_daily(symbol="sz002515", adjust="hfq-factor")
+print(qfq_factor_df)
