@@ -53,25 +53,15 @@ class StockPriceHistory:
         # 结束日期设为今天之后一天
         end_date = (datetime.datetime.now() + datetime.timedelta(days=1))
 
-        stock_price_df, failed_codes = self.query_ak_for_stocks(stock_trans_df, start_date,
-                                                                end_date)
-
-        # 如果磁盘上有缓存文件，先把缓存加载（最后会删除去重）
-        if os.path.exists(ALL_STOCK_HIST_DF_PKL):
-            all_stock_hist_df = self.load_from_local(ALL_STOCK_HIST_DF_PKL)
-            all_stock_hist_df = pd.concat([all_stock_hist_df, stock_price_df])
-        else:
-            all_stock_hist_df = stock_price_df
-
-        all_stock_hist_df = self.remove_duplicates(all_stock_hist_df)
-        # 保存到本地
-        self.save_to_local(all_stock_hist_df, ALL_STOCK_HIST_DF_PKL)
+        all_stock_hist_df, failed_codes = self.query_ak_for_stocks(stock_trans_df, start_date,
+                                                                   end_date)
 
         return all_stock_hist_df, failed_codes
 
+    @staticmethod
+    # 将一段时间的不复权价格转换为以特定日期为基准的后复权价格
     # 为了模拟评估模式：从akshare为持仓数据获取从某日开始后复权的收盘价，不保存本地
-    # 将一段时间的不复权价格转换为以特定日期为基准的后复权价格了
-    def cal_hfq_price(self, stock_price_df, hfq_data, base_date=None):
+    def cal_hfq_price(stock_price_df, hfq_data, base_date=None):
         # 这段代码的主要步骤如下:
         # 不复权价格: stock_price_df
         # 后复权因子数据: hfq_data。
@@ -119,19 +109,19 @@ class StockPriceHistory:
                         0]
 
         # 计算后复权价格
-        stock_price_df.loc[:,'后复权收盘'] = stock_price_df['收盘'] * stock_price_df['后复权因子']
+        stock_price_df.loc[:, '后复权收盘'] = stock_price_df['收盘'] * stock_price_df['后复权因子']
 
         # 以后复权方式获取价格
-        stock_price_df = self.remove_duplicates(stock_price_df)
+        stock_price_df = StockPriceHistory.remove_duplicates(stock_price_df)
 
         return stock_price_df
 
-    # 从akshare查询持仓列表的股价
+    # 从akshare查询持仓列表的股价（对于入参stock_trans其实没有特别要求，只需要有["交收日期","证券代码"]即可）
     def query_ak_for_stocks(self, stock_trans_df, start_date, end_date, adjust_type=AK_ADJUST_NONE):
         stock_price_df = pd.DataFrame()
         # 保存港股通结算汇率
         exchange_rate_df = self.cache_exchange_rate_from_ak()
-        # 切分为200日一份，以免冗余数据过多
+        # 切分为100日一份，以免冗余数据过多
         date_ranges = self.split_date_ranges(start_date, end_date)
         # 开始循环
         failed_codes = []
@@ -152,7 +142,18 @@ class StockPriceHistory:
         # 将"日期"列转换为日期类型
         stock_price_df['日期'] = pd.to_datetime(stock_price_df['日期'])
 
-        return stock_price_df, failed_codes
+        # 如果磁盘上有缓存文件，先把缓存加载（最后会删除去重）
+        if os.path.exists(ALL_STOCK_HIST_DF_PKL):
+            all_stock_hist_df = self.load_from_local(ALL_STOCK_HIST_DF_PKL)
+            all_stock_hist_df = pd.concat([all_stock_hist_df, stock_price_df])
+        else:
+            all_stock_hist_df = stock_price_df
+
+        all_stock_hist_df = self.remove_duplicates(all_stock_hist_df)
+        # 保存到本地
+        self.save_to_local(all_stock_hist_df, ALL_STOCK_HIST_DF_PKL)
+
+        return all_stock_hist_df, failed_codes
 
     @staticmethod
     # 检查stock_price_df中的重复数据，并删除
@@ -196,13 +197,13 @@ class StockPriceHistory:
         stock_hist_df['证券代码'] = stock_code
         return stock_hist_df
 
-    # 将日期区间按照100天间隔切分为左闭右闭的子区间，这样每次批量获取的收盘价数据不至于冗余太多
+    # 将日期区间按照bin_size(缺省100天)间隔切分为左闭右闭的子区间，这样每次批量获取的收盘价数据不至于冗余太多
     @staticmethod
-    def split_date_ranges(start_date, end_date):
+    def split_date_ranges(start_date, end_date, bin_size=100):
         date_ranges = []
         current_date = pd.to_datetime(start_date)
         while current_date < pd.to_datetime(end_date):
-            next_date = current_date + timedelta(days=100)
+            next_date = current_date + timedelta(days=bin_size)
             if next_date > pd.to_datetime(end_date):
                 next_date = pd.to_datetime(end_date)
             date_ranges.append((current_date, next_date))
@@ -228,7 +229,7 @@ class StockPriceHistory:
 
     # 调用akshare接口（新浪接口）获取目标股票的后复权因子
     @staticmethod
-    def cache_hfq_factors( stockcodes):
+    def cache_hfq_factors(stockcodes):
         all_hfq_factors = pd.DataFrame()
         df_hfq_factors = None
         for stock_code in stockcodes:
@@ -325,7 +326,5 @@ if __name__ == "__main__":
     # run_update_ak()
     # StockPriceHistory.cache_trade_dates() # 获取交易日的函数不用经常调用，每年调一次即可
 
-
-   # StockPriceHistory.cache_hfq_factors(['002515','01024'])
+    # StockPriceHistory.cache_hfq_factors(['002515','01024'])
     get_hfq_prices()
-
