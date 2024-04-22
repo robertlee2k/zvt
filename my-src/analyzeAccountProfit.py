@@ -6,7 +6,7 @@ from stockPriceHistory import StockPriceHistory
 
 
 # 计算股票当日市值
-def cal_market_value(stock_holding_records, stock_price_df,start_date):
+def cal_market_value(stock_holding_records, stock_price_df, start_date):
     stock_holding_records['交收日期'] = pd.to_datetime(stock_holding_records['交收日期'])
     stock_holding_records['当日市值'] = 0.0
 
@@ -39,6 +39,7 @@ def cal_account_profit(df_market_value, account_balance_records):
     df_total_profit = calcu_total_profit(df_account_profit)
     return df_total_profit, df_account_profit
 
+
 # 计算账户的综合盈利
 def calcu_total_profit(df_account_profit):
     df_total_profit = df_account_profit.groupby(['交收日期'])['盈亏'].sum().reset_index()
@@ -60,6 +61,7 @@ def visualize_profit(df_total_profit):
     # 显示图形
     plt.show()
 
+
 # 分析实际交易的信息
 def analyze(start_date=None):
     account_summary = AccountSummary()
@@ -68,7 +70,7 @@ def analyze(start_date=None):
     # 加载股票价格
     stock_price_df = StockPriceHistory().get_stock_price_df(start_date)
     # 获取股票的market_value
-    df_market_value = cal_market_value(stock_holding_records,stock_price_df, start_date)
+    df_market_value = cal_market_value(stock_holding_records, stock_price_df, start_date)
 
     df_total_profit, df_account_profit = cal_account_profit(df_market_value, account_balance_records)
 
@@ -87,6 +89,7 @@ def analyze(start_date=None):
     stock_holding_records, df_account_profit = account_summary.load_account_summaries(start_date)
     df_total_profit = calcu_total_profit(df_account_profit)
     visualize_profit(df_total_profit)
+
 
 # 模拟某日没有做操作的信息
 def simulate(checkpoint_date):
@@ -137,6 +140,7 @@ def run():
     # analyze(start_date)
     checkpoint_date = pd.to_datetime('20231124', format='%Y%m%d')
     simulate(checkpoint_date)
+
 
 if __name__ == "__main__":
     run()
