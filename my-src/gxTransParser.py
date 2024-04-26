@@ -260,4 +260,12 @@ def insert_or_update_holdings(today_holdings, account_type, trade_date, stock_co
 
 
 if __name__ == "__main__":
-    analyze_transactions()#start_date=pd.to_datetime('20230225', format='%Y%m%d'))
+    # stock_holding_records = AccountSummary.load_stockhold_from_file()
+    # if stock_holding_records is None:
+    #     continue_from_date = None
+    # else:
+    #     continue_from_date = stock_holding_records['交收日期'].max()
+    # print(f"从{continue_from_date}开始继续更新股票持仓数据")
+    # analyze_transactions(continue_from_date)
+    # TODO 增量模式下会产生重复
+    analyze_transactions(start_date=pd.to_datetime('20240225', format='%Y%m%d'))

@@ -303,13 +303,21 @@ class StockPriceHistory:
 
 
 def run_update_ak():
-    start_date = pd.to_datetime('20240321', format='%Y%m%d')
     stock_price = StockPriceHistory()
+
+    # 如果磁盘上有缓存文件，先把缓存加载，用于确定继续的start_date
+    if os.path.exists(ALL_STOCK_HIST_DF_PKL):
+        all_stock_hist_df = stock_price.load_from_local(ALL_STOCK_HIST_DF_PKL)
+        start_date = all_stock_hist_df['日期'].max()
+    if start_date is None:
+        start_date = pd.to_datetime('20070501', format='%Y%m%d')
+
     df, failed = stock_price.fetch_close_price_from_ak(start_date)
     print(df)
     print(f"failed codes: {failed}")
 
 
+# 纯粹测试函数
 def get_hfq_prices():
     stock_price = StockPriceHistory()
     start_date = pd.to_datetime('20191124', format='%Y%m%d')
@@ -323,8 +331,8 @@ def get_hfq_prices():
 
 # Example usage
 if __name__ == "__main__":
-    # run_update_ak()
-    # StockPriceHistory.cache_trade_dates() # 获取交易日的函数不用经常调用，每年调一次即可
+    run_update_ak()
+# StockPriceHistory.cache_trade_dates() # 获取交易日的函数不用经常调用，每年调一次即可
 
-    # StockPriceHistory.cache_hfq_factors(['002515','01024'])
-    get_hfq_prices()
+# StockPriceHistory.cache_hfq_factors(['002515','01024'])
+# get_hfq_prices()

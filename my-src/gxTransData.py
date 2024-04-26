@@ -140,9 +140,11 @@ class AccountSummary:
                 })
         else:  # 从特定日期开始的增量数据分析
             stockhold_history = AccountSummary.load_stockhold_from_file()
-            # 找到 start_date 前一天的持仓记录
-            prev_day = start_date - pd.Timedelta(days=1)
-            stockhold_data = stockhold_history[stockhold_history['交收日期'] == prev_day]
+            # 找到离 start_date 最近的交收日期对应的行索引
+            prev_date_idx = stockhold_history['交收日期'].sub(start_date).idxmax()
+            # 找到离 start_date 最近的交收日期(可以是当天）
+            prev_date = stockhold_history.loc[prev_date_idx]['交收日期']
+            stockhold_data = stockhold_history.loc[stockhold_history['交收日期'] == prev_date]
         return pd.DataFrame(stockhold_data)
 
     @staticmethod
@@ -158,14 +160,16 @@ class AccountSummary:
                     '资金余额': details['资金余额'],
                     '记录账户余额': 0.0,  # 交易文件中记录的账户余额
                     '校验差异': 0.0,  # 校验数据
-                    '盈亏': 0.0, #盈亏放前面，以免analyzeAccountProfit时错位
+                    '盈亏': 0.0,  # 盈亏放前面，以免analyzeAccountProfit时错位
                     '当日市值': 0.0,
                 })
         else:  # 从特定日期开始的增量数据分析
             balance_history = AccountSummary.load_balance_from_file()
-            # 找到 start_date 前一天的持仓记录
-            prev_day = start_date - pd.Timedelta(days=1)
-            balance_data = balance_history[balance_history['交收日期'] == prev_day]
+            # 找到离 start_date 最近的交收日期对应的行索引
+            prev_date_idx = balance_history['交收日期'].sub(start_date).idxmax()
+            # 找到离 start_date 最近的交收日期(可以是当天）
+            prev_date = balance_history.loc[prev_date_idx]['交收日期']
+            balance_data = balance_history.loc[balance_history['交收日期'] == prev_date]
         return pd.DataFrame(balance_data)
 
     # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
@@ -206,8 +210,9 @@ class AccountSummary:
 
     def save_account_history(self, start_date=None):
         # 个股盈亏数据的重命名
-        self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
-        self.stock_profit_history = self.stock_profit_history[['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '实现盈亏']]
+        if len(self.stock_profit_history)>0:
+            self.stock_profit_history.rename(columns={'持股成本': '实现盈亏'}, inplace=True)
+            self.stock_profit_history = self.stock_profit_history[['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '实现盈亏']]
 
         # 创建一个Excel文件
         if start_date:  # 增量模式
@@ -246,14 +251,17 @@ class AccountSummary:
     # 在已有的excel文件指定sheet日期之后追加新的增量数据
     @staticmethod
     def append_data_to_sheet(writer, sheet_name, df_new_data, start_date):
-        # 确保新数据只有start_date之后的
-        df_new_data = df_new_data[df_new_data['交收日期'] >= start_date]
-        # 加载已有的数据
-        df_old_data = pd.DataFrame(pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name=sheet_name))
-        df_old_data['交收日期'] = pd.to_datetime(df_old_data['交收日期'])
-        # 将数据df_new_data写入excel中的sheet表,从start_date之后的第一个行开始覆盖/追加写：
-        skip_rows = df_old_data[df_old_data['交收日期'] < start_date].shape[0]
-        df_new_data.to_excel(writer, sheet_name=sheet_name, startrow=skip_rows + 1, index=False, header=False)
+        if len(df_new_data) > 0 :
+            # 确保新数据只有start_date之后的
+            df_new_data = df_new_data[df_new_data['交收日期'] >= start_date]
+            # 加载已有的数据
+            df_old_data = pd.DataFrame(pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name=sheet_name))
+            df_old_data['交收日期'] = pd.to_datetime(df_old_data['交收日期'])
+            # 将数据df_new_data写入excel中的sheet表,从start_date之后的第一个行开始覆盖/追加写：
+            skip_rows = df_old_data[df_old_data['交收日期'] < start_date].shape[0]
+            df_new_data.to_excel(writer, sheet_name=sheet_name, startrow=skip_rows + 1, index=False, header=False)
+        else:
+            print(f"没有数据需要写入{sheet_name}，跳过")
 
 
 # Example usage
