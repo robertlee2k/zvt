@@ -6,7 +6,7 @@ from stockPriceHistory import StockPriceHistory
 
 
 # 计算股票当日市值
-def cal_market_value(stock_holding_records, stock_price_df, start_date):
+def cal_market_value(stock_holding_records, stock_price_df):
     stock_holding_records['交收日期'] = pd.to_datetime(stock_holding_records['交收日期'])
     stock_holding_records['当日市值'] = 0.0
 
@@ -70,7 +70,7 @@ def analyze(start_date=None):
     # 加载股票价格
     stock_price_df = StockPriceHistory().get_stock_price_df(start_date)
     # 获取股票的market_value
-    df_market_value = cal_market_value(stock_holding_records, stock_price_df, start_date)
+    df_market_value = cal_market_value(stock_holding_records, stock_price_df)
 
     df_total_profit, df_account_profit = cal_account_profit(df_market_value, account_balance_records)
 
@@ -95,9 +95,9 @@ def analyze(start_date=None):
 def simulate(checkpoint_date):
     sim_stock_holding_records, sim_account_balance_records = get_sim_account_history(checkpoint_date)
     # 获取股票后复权信息
-    stock_price_df = StockPriceHistory().calcu_hfq_price(sim_stock_holding_records, checkpoint_date)
+    stock_price_df = StockPriceHistory().cal_hfq_price(sim_stock_holding_records, checkpoint_date)
     # 获取股票的market_value
-    df_market_value = cal_market_value(sim_stock_holding_records, stock_price_df, checkpoint_date)
+    df_market_value = cal_market_value(sim_stock_holding_records, stock_price_df)
     df_total_profit, df_account_profit = cal_account_profit(df_market_value, sim_account_balance_records)
     visualize_profit(df_total_profit)
 
@@ -122,24 +122,24 @@ def get_sim_account_history(checkpoint_date):
 
 
 # 获取从startDate到今天的所有沪深股市交易日list
-def get_trade_dates(startDate):
+def get_trade_dates(start_date):
     # 获取当前日期
     today = datetime.date.today()
     # 生成日期序列
-    date_range = pd.date_range(start=startDate, end=today, freq='D')
+    date_range = pd.date_range(start=start_date, end=today, freq='D')
     # 获取所有的交易日日期
     trade_dates = StockPriceHistory.load_trade_dates()
-    trade_dates = trade_dates[trade_dates['trade_date'] > startDate]
+    trade_dates = trade_dates[trade_dates['trade_date'] > start_date]
     # 使用isin()方法过滤日期
     filtered_dates = date_range[date_range.isin(trade_dates['trade_date'])]
     return filtered_dates
 
 
 def run():
-    # start_date = pd.to_datetime('20231124', format='%Y%m%d')
-    # analyze(start_date)
-    checkpoint_date = pd.to_datetime('20231124', format='%Y%m%d')
-    simulate(checkpoint_date)
+    start_date = pd.to_datetime('20240101', format='%Y%m%d')
+    analyze(start_date)
+    # checkpoint_date = pd.to_datetime('20231124', format='%Y%m%d')
+    # simulate(checkpoint_date)
 
 
 if __name__ == "__main__":

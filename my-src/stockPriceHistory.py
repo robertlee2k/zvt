@@ -4,6 +4,7 @@ import akshare as ak
 import pandas as pd
 from datetime import timedelta
 from gxTransData import AccountSummary
+import gxTransParser
 
 ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl'  # 所有股票价格
 HGT_EXCHANGE_RATE_FILE = 'stock/hgt_exchange_rate.pkl'  # 沪港通结算汇率
@@ -40,20 +41,28 @@ class StockPriceHistory:
             return None
 
     # 从akshare获取收盘价，增量更新模式，在原有数据文件基础上继续加载数据（最后会去重）
+    # 这里需要两类数据： 1. 获取持仓股票的收盘价。 2. 获取爬取交易流水数据的收盘价
     def fetch_close_price_from_ak(self, start_date=None):
-        # 获取持仓股票的收盘价
-        # 获取每日持股数据
-        stock_trans_df = AccountSummary.load_stockhold_from_file()
+        # 1. 获取持仓股票的收盘价
+        stock_hold_df = AccountSummary.load_stockhold_from_file()
 
         if start_date is None:  # 开始日期为空，则从20070501开始
             start_date = pd.to_datetime("20070501")
         else:
-            stock_trans_df = stock_trans_df[stock_trans_df['交收日期'] >= start_date]
+            stock_hold_df = stock_hold_df[stock_hold_df['交收日期'] >= start_date]
+
+        stock_hold_df = stock_hold_df[["交收日期", "证券代码"]]
+
+        # 2. 获取爬取交易流水数据的收盘价
+        stock_trans_df = gxTransParser.get_transactions(start_date=start_date)
+        stock_trans_df = stock_trans_df[["交收日期", "证券代码"]]
+
+        stock_df = pd.concat([stock_hold_df, stock_trans_df], ignore_index=True)
 
         # 结束日期设为今天之后一天
         end_date = (datetime.datetime.now() + datetime.timedelta(days=1))
 
-        all_stock_hist_df, failed_codes = self.query_ak_for_stocks(stock_trans_df, start_date,
+        all_stock_hist_df, failed_codes = self.query_ak_for_stocks(stock_df, start_date,
                                                                    end_date)
 
         return all_stock_hist_df, failed_codes
@@ -305,6 +314,7 @@ class StockPriceHistory:
 def run_update_ak():
     stock_price = StockPriceHistory()
 
+    start_date = None
     # 如果磁盘上有缓存文件，先把缓存加载，用于确定继续的start_date
     if os.path.exists(ALL_STOCK_HIST_DF_PKL):
         all_stock_hist_df = stock_price.load_from_local(ALL_STOCK_HIST_DF_PKL)

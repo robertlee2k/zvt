@@ -20,10 +20,7 @@ def analyze_transactions(start_date=None):
     # 创建一个字典存储每只股票的交易记录
     stock_transactions = {}
     # 加载指定日期开始后的交易数据，如果start_date==None 意味着全量计算
-    data = StockTransHistory.load_stock_transactions(start_date)
-
-    # 分拆证券代码和证券名称
-    data[['证券名称', '证券代码']] = data.apply(split_security, axis=1, result_type='expand')
+    data = get_transactions(start_date)
 
     # 初始化每日持股、每日资金余额数据的空DataFrame
     account_summary = AccountSummary()
@@ -226,6 +223,13 @@ def analyze_transactions(start_date=None):
     writer.close()
 
 
+def get_transactions(start_date):
+    data = StockTransHistory.load_stock_transactions(start_date)
+    # 分拆证券代码和证券名称
+    data[['证券名称', '证券代码']] = data.apply(split_security, axis=1, result_type='expand')
+    return data
+
+
 def get_record_from_holdings(today_holdings, account_type, stock_code):
     stock_holding_index = today_holdings[
         (today_holdings['账户类型'] == account_type) & (today_holdings['证券代码'] == stock_code)].index
@@ -260,12 +264,13 @@ def insert_or_update_holdings(today_holdings, account_type, trade_date, stock_co
 
 
 if __name__ == "__main__":
-    # stock_holding_records = AccountSummary.load_stockhold_from_file()
-    # if stock_holding_records is None:
-    #     continue_from_date = None
-    # else:
-    #     continue_from_date = stock_holding_records['交收日期'].max()
-    # print(f"从{continue_from_date}开始继续更新股票持仓数据")
-    # analyze_transactions(continue_from_date)
-    # TODO 增量模式下会产生重复
-    analyze_transactions(start_date=pd.to_datetime('20240225', format='%Y%m%d'))
+    stock_holding_records = AccountSummary.load_stockhold_from_file()
+    if stock_holding_records is None:
+        continue_from_date = None
+    else:
+        continue_from_date = stock_holding_records['交收日期'].max()
+    print(f"从{continue_from_date}开始继续更新股票持仓数据")
+    analyze_transactions(continue_from_date)
+
+    # analyze_transactions(start_date=pd.to_datetime('20240325', format='%Y%m%d'))
+    # analyze_transactions()
