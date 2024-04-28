@@ -172,12 +172,21 @@ class StockPriceHistory:
         return all_stock_hist_df, failed_codes
 
     @staticmethod
-    # 检查stock_price_df中的重复数据，并删除
+    # 检查stock_price_df中的重复数据，和收盘价格为NA的数据，并删除
     def remove_duplicates(stock_price_df):
+        print("删除以下收盘价格为NA的记录行：")
+        # 打印出 '收盘' 字段为 NA 的记录
+        na_records = stock_price_df[stock_price_df['收盘'].isna()]
+        print(na_records)
+        # 删除 '收盘' 字段为 NA 的记录
+        stock_price_df = stock_price_df[~stock_price_df['收盘'].isna()]
+
+        # 删除重复行
         duplicate_rows = stock_price_df[stock_price_df.duplicated()]
         print("删除以下重复数据行:")
         print(duplicate_rows)
         stock_price_df = stock_price_df.drop_duplicates()
+
         # 重新设置index
         stock_price_df.reset_index(drop=True, inplace=True)
         return stock_price_df
@@ -321,13 +330,11 @@ class StockPriceHistory:
 def run_update_ak():
     stock_price = StockPriceHistory()
 
-    start_date = None
+    start_date = pd.to_datetime('20070501', format='%Y%m%d')
     # 如果磁盘上有缓存文件，先把缓存加载，用于确定继续的start_date
     if os.path.exists(ALL_STOCK_HIST_DF_PKL):
         all_stock_hist_df = stock_price.load_from_local(ALL_STOCK_HIST_DF_PKL)
         start_date = all_stock_hist_df['日期'].max()
-    if start_date is None:
-        start_date = pd.to_datetime('20070501', format='%Y%m%d')
 
     df, failed = stock_price.fetch_close_price_from_ak(start_date)
     print(df)

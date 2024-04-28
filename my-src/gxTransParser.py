@@ -1,5 +1,3 @@
-import datetime
-
 import pandas as pd
 
 from gxTransData import SummaryClassifier, AccountSummary
@@ -42,10 +40,7 @@ def analyze_transactions(start_date=None):
         if debug_date == trade_date:
             print("here is the debug point.")
 
-        # 新的一天，将之前一天的记录更新追加到history里，并初始化新的日期
-        # 将上一交易日的记录加入历史记录df中
-        account_summary.add_to_history(today_balance, today_holdings)
-        # copy一份作为新的交易日的空白记录
+        # copy一份作为新的交易日的空白记录，并初始化新的日期
         today_holdings = today_holdings.copy()
         today_balance = today_balance.copy()
         # Check if the stock quantity is zero after the trade
@@ -161,9 +156,11 @@ def analyze_transactions(start_date=None):
         today_balance['校验差异'] = today_balance['资金余额'] - today_balance['记录账户余额']
         # 将差异小于0.01的值设置为0
         today_balance.loc[abs(today_balance['校验差异']) < 0.01, '校验差异'] = 0
+
+        # 新的一天，将之前一天的记录更新追加到history里
+        # 将上一交易日的记录加入历史记录df中
+        account_summary.add_to_history(today_balance, today_holdings)
     # end loop : for trade_date, date_group in grouped_by_date
-    # 处理最后一天的数据
-    account_summary.add_to_history(today_balance, today_holdings)
 
     # 创建结果列表
     result = []
@@ -273,7 +270,7 @@ def analyze_incrementally():
         continue_from_date = None
     else:
         continue_from_date = stock_holding_records['交收日期'].max()
-        continue_from_date = continue_from_date + datetime.timedelta(days=1)  # 从下一天开始
+    # continue_from_date = continue_from_date + datetime.timedelta(days=1)  # 从下一天开始
     print(f"从{continue_from_date}开始继续更新股票持仓数据")
     analyze_transactions(continue_from_date)
 

@@ -1,6 +1,10 @@
+import datetime
+
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
-import datetime
+from matplotlib.ticker import FuncFormatter
+
 from gxTransData import AccountSummary
 from stockPriceHistory import StockPriceHistory
 
@@ -40,30 +44,14 @@ def cal_account_profit(df_market_value, account_balance_records):
     return df_total_profit, df_account_profit
 
 
-# 计算账户的综合盈利
+# 计算账户的综合累计盈利和区间相对盈利
 def calcu_total_profit(df_account_profit):
     df_total_profit = df_account_profit.groupby(['交收日期'])['盈亏'].sum().reset_index()
     return df_total_profit
 
 
-def visualize_profit(df_total_profit):
-    # 绘制盈利曲线
-    plt.figure(figsize=(12, 6))
-    plt.plot(df_total_profit['交收日期'], df_total_profit['盈亏'], marker='o', color='b', linestyle='-')
-    # 设置图形标题和标签
-    plt.title('Daily Profit Over Time')
-    plt.xlabel('Date')
-    plt.ylabel('Profit')
-    plt.xticks(rotation=45)  # 旋转日期标签，使其更易读
-    # 显示网格线和图例
-    plt.grid(True)
-    plt.legend(['Profit'])
-    # 显示图形
-    plt.show()
-
-
-# 分析实际交易的信息
-def analyze(start_date=None):
+# 分析实际交易的信息，并保存到文件里
+def analyze_and_update(start_date=None):
     account_summary = AccountSummary()
     # Load data from AccountSummary
     stock_holding_records, account_balance_records = account_summary.load_account_summaries(start_date)
@@ -85,10 +73,81 @@ def analyze(start_date=None):
     # 设置数据格式
     account_summary.format_account_summary_file()
 
+
+# 绘制盈利图像
+def draw_profit(start_date):
     # 从文件里重新加载再计算
+    account_summary = AccountSummary()
     stock_holding_records, df_account_profit = account_summary.load_account_summaries(start_date)
     df_total_profit = calcu_total_profit(df_account_profit)
+
     visualize_profit(df_total_profit)
+
+
+def annotate_daily_profit(x, y, text, ax):
+    ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 10), ha='center')
+
+
+def visualize_profit(df_total_profit):
+    # 计算每日盈利
+    df_daily_profit = df_total_profit['盈亏'].diff()
+    df_daily_profit = pd.DataFrame({'交收日期': df_total_profit['交收日期'], '盈亏': df_daily_profit})
+    # 创建一个新的figure
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+
+    # 绘制按日累计盈利曲线
+    ax1.plot(df_total_profit['交收日期'], df_total_profit['盈亏'] / 10000, color='r', label='Cumulative Profit')
+    ax1.set_title('Daily Profit Over Time')
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Profit (10,000 CNY)')
+    ax1.tick_params(axis='x', rotation=45)
+    ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
+    ax1.grid(True)
+    ax1.legend()
+
+    # 绘制每日盈利柱状图
+    ax2.bar(df_daily_profit['交收日期'], df_daily_profit['盈亏'] / 10000,
+            color=df_daily_profit['盈亏'].apply(lambda x: 'g' if x < 0 else 'r'))
+    ax2.set_title('Daily Profit')
+    ax2.set_xlabel('Date')
+    ax2.set_ylabel('Profit (10,000 CNY)')
+
+    # 使用 FuncFormatter 格式化 x 轴刻度
+    def format_date(x):
+        if int(x) < len(df_daily_profit['交收日期']):
+            return df_daily_profit['交收日期'].iloc[int(x)].strftime('%Y-%m-%d')
+        else:
+            return ''
+
+    ax2.xaxis.set_major_formatter(FuncFormatter(format_date))
+    ax2.tick_params(axis='x', rotation=45)
+    ax2.ticklabel_format(style='plain', axis='y', useOffset=False)
+    ax2.grid(True)
+
+    # 添加点击事件,显示具体数值
+    def on_click(event):
+        if event.inaxes == ax2:
+            date = pd.to_datetime(mdates.num2date(event.xdata)).tz_localize(None)
+            date = date.normalize()
+            print(date)
+            index = df_daily_profit['交收日期'].searchsorted(date)
+            if 0 < index < len(df_daily_profit):
+                profit = df_daily_profit['盈亏'].iloc[index] / 10000
+                annotate_daily_profit(event.xdata, event.ydata, f"{date.strftime('%Y-%m-%d')}: {profit:.2f}", ax2)
+                fig.canvas.draw_idle()
+
+    fig.canvas.mpl_connect('button_press_event', on_click)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def find_nearest_index(df, date):
+    """
+    查找离给定日期最近的日期的索引
+    """
+    df['diff'] = (df['交收日期'] - date).dt.days.abs()
+    return df['diff'].idxmin()
 
 
 # 模拟某日没有做操作的信息
@@ -136,8 +195,10 @@ def get_trade_dates(start_date):
 
 
 def run():
-    start_date = pd.to_datetime('20240101', format='%Y%m%d')
-    analyze(start_date)
+    start_date = pd.to_datetime('20230101', format='%Y%m%d')
+    # analyze_and_update(start_date)
+    draw_profit(start_date)
+
     # checkpoint_date = pd.to_datetime('20231124', format='%Y%m%d')
     # simulate(checkpoint_date)
 
