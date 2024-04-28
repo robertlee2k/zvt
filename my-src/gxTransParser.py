@@ -1,7 +1,9 @@
+import datetime
+
 import pandas as pd
 
-from gxTransHistory import StockTransHistory
 from gxTransData import SummaryClassifier, AccountSummary
+from gxTransHistory import StockTransHistory
 
 
 # 拆分逻辑：根据空格分隔拆分证券名称和证券代码
@@ -263,14 +265,21 @@ def insert_or_update_holdings(today_holdings, account_type, trade_date, stock_co
     return today_holdings
 
 
-if __name__ == "__main__":
+# 从当前analyze_summary.xls文件最新的日子接着分析
+def analyze_incrementally():
+    # 从目前持仓文件的下一天开始分析
     stock_holding_records = AccountSummary.load_stockhold_from_file()
     if stock_holding_records is None:
         continue_from_date = None
     else:
         continue_from_date = stock_holding_records['交收日期'].max()
+        continue_from_date = continue_from_date + datetime.timedelta(days=1)  # 从下一天开始
     print(f"从{continue_from_date}开始继续更新股票持仓数据")
     analyze_transactions(continue_from_date)
+
+
+if __name__ == "__main__":
+    analyze_incrementally()
 
     # analyze_transactions(start_date=pd.to_datetime('20240325', format='%Y%m%d'))
     # analyze_transactions()

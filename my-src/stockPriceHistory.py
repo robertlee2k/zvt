@@ -49,7 +49,14 @@ class StockPriceHistory:
         if start_date is None:  # 开始日期为空，则从20070501开始
             start_date = pd.to_datetime("20070501")
         else:
-            stock_hold_df = stock_hold_df[stock_hold_df['交收日期'] >= start_date]
+            # 找到离 start_date 最近的交收日期对应的行索引
+            prev_date_idx = stock_hold_df['交收日期'].sub(start_date).abs().idxmin()
+            # 找到离 start_date 最近的交收日期(可以是当天）
+            prev_date = stock_hold_df.loc[prev_date_idx]['交收日期']
+            print(f'最近持仓日期{prev_date}')
+            stock_hold_df = stock_hold_df[stock_hold_df['交收日期'] >= prev_date]
+            # 把持仓股票的交收日期改为start_date（因为在下面的代码里这个日期如果小于start_date会被过滤掉）
+            stock_hold_df['交收日期'] = start_date
 
         stock_hold_df = stock_hold_df[["交收日期", "证券代码"]]
 
