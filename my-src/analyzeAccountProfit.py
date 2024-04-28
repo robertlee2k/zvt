@@ -84,22 +84,49 @@ def draw_profit(start_date):
     visualize_profit(df_total_profit)
 
 
-def annotate_daily_profit(x, y, text, ax):
+def annotate_profit(x, y, text, ax):
     ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 10), ha='center')
+
+
+def format_date(x, pos, df_profit):
+    index = find_nearest_date_in_figure(df_profit, x)
+    if 0 < index < len(df_profit['交收日期']):
+        return df_profit['交收日期'].iloc[index].strftime('%Y-%m-%d')
+    else:
+        return ''
+
+
+def find_nearest_date_in_figure(df_profit, x):
+    index = -999
+    if x is not None:
+        input_date = pd.to_datetime(mdates.num2date(x)).tz_localize(None).normalize()
+        index = df_profit['交收日期'].searchsorted(input_date)
+    return index
+
+
+def on_click_show_profit(event, df_profit, fig, ax):
+    index = find_nearest_date_in_figure(df_profit, event.xdata)
+    if 0 < index < len(df_profit):
+        profit = df_profit['盈亏'].iloc[index] / 10000
+        annotate_profit(event.xdata, event.ydata, f"{df_profit['交收日期'].iloc[index].strftime('%Y/%m/%d')}: {profit:.2f}",
+                        ax)
+        fig.canvas.draw_idle()
 
 
 def visualize_profit(df_total_profit):
     # 计算每日盈利
     df_daily_profit = df_total_profit['盈亏'].diff()
     df_daily_profit = pd.DataFrame({'交收日期': df_total_profit['交收日期'], '盈亏': df_daily_profit})
-    # 创建一个新的figure
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+    plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+    # 创建一个新的figure，共享X轴
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
     # 绘制按日累计盈利曲线
-    ax1.plot(df_total_profit['交收日期'], df_total_profit['盈亏'] / 10000, color='r', label='Cumulative Profit')
-    ax1.set_title('Daily Profit Over Time')
-    ax1.set_xlabel('Date')
-    ax1.set_ylabel('Profit (10,000 CNY)')
+    ax1.plot(df_total_profit['交收日期'], df_total_profit['盈亏'] / 10000, color='r', label='累计盈利')
+    ax1.set_title('累计盈利曲线图')
+    ax1.set_ylabel('盈利(万元)')
     ax1.tick_params(axis='x', rotation=45)
     ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
     ax1.grid(True)
@@ -108,46 +135,27 @@ def visualize_profit(df_total_profit):
     # 绘制每日盈利柱状图
     ax2.bar(df_daily_profit['交收日期'], df_daily_profit['盈亏'] / 10000,
             color=df_daily_profit['盈亏'].apply(lambda x: 'g' if x < 0 else 'r'))
-    ax2.set_title('Daily Profit')
-    ax2.set_xlabel('Date')
-    ax2.set_ylabel('Profit (10,000 CNY)')
-
-    # 使用 FuncFormatter 格式化 x 轴刻度
-    def format_date(x):
-        if int(x) < len(df_daily_profit['交收日期']):
-            return df_daily_profit['交收日期'].iloc[int(x)].strftime('%Y-%m-%d')
-        else:
-            return ''
-
-    ax2.xaxis.set_major_formatter(FuncFormatter(format_date))
+    ax2.set_title('每日盈利', loc='center')
+    ax2.set_xlabel('日期')
     ax2.tick_params(axis='x', rotation=45)
-    ax2.ticklabel_format(style='plain', axis='y', useOffset=False)
+    ax2.set_ylabel('盈利(万元)')
     ax2.grid(True)
 
-    # 添加点击事件,显示具体数值
-    def on_click(event):
-        if event.inaxes == ax2:
-            date = pd.to_datetime(mdates.num2date(event.xdata)).tz_localize(None)
-            date = date.normalize()
-            print(date)
-            index = df_daily_profit['交收日期'].searchsorted(date)
-            if 0 < index < len(df_daily_profit):
-                profit = df_daily_profit['盈亏'].iloc[index] / 10000
-                annotate_daily_profit(event.xdata, event.ydata, f"{date.strftime('%Y-%m-%d')}: {profit:.2f}", ax2)
-                fig.canvas.draw_idle()
+    # 设置 x 轴刻度范围
+    min_date = df_total_profit['交收日期'].min()
+    max_date = df_total_profit['交收日期'].max()
+    ax1.set_xlim(min_date, max_date)
+    ax2.set_xlim(min_date, max_date)
 
-    fig.canvas.mpl_connect('button_press_event', on_click)
+    # 添加点击事件,显示具体数值
+    fig.canvas.mpl_connect('button_press_event', lambda event: on_click_show_profit(event, df_total_profit, fig, ax1))
+    fig.canvas.mpl_connect('button_press_event', lambda event: on_click_show_profit(event, df_daily_profit, fig, ax2))
+
+    # 调整子图间距,让它们能够充满整个画布
+    plt.subplots_adjust(hspace=0.5)
 
     plt.tight_layout()
     plt.show()
-
-
-def find_nearest_index(df, date):
-    """
-    查找离给定日期最近的日期的索引
-    """
-    df['diff'] = (df['交收日期'] - date).dt.days.abs()
-    return df['diff'].idxmin()
 
 
 # 模拟某日没有做操作的信息
