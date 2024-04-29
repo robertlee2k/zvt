@@ -2,7 +2,9 @@ import datetime
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+import seaborn as sns
 from matplotlib.ticker import FuncFormatter
 
 from gxTransData import AccountSummary
@@ -113,6 +115,12 @@ def on_click_show_profit(event, df_profit, fig, ax):
         fig.canvas.draw_idle()
 
 
+def on_motion(event, fig, vline1, vline2):
+    vline1.set_xdata(np.array([event.xdata]))
+    vline2.set_xdata(np.array([event.xdata]))
+    fig.canvas.draw_idle()
+
+
 def visualize_profit(df_total_profit):
     # 计算每日盈利
     df_daily_profit = df_total_profit['盈亏'].diff()
@@ -124,21 +132,22 @@ def visualize_profit(df_total_profit):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
     # 绘制按日累计盈利曲线
-    ax1.plot(df_total_profit['交收日期'], df_total_profit['盈亏'] / 10000, color='r', label='累计盈利')
-    ax1.set_title('累计盈利曲线图')
-    ax1.set_ylabel('盈利(万元)')
-    ax1.tick_params(axis='x', rotation=45)
-    ax1.ticklabel_format(style='plain', axis='y', useOffset=False)
+    ax1 = sns.lineplot(x=df_total_profit['交收日期'], y=df_total_profit['盈亏'] / 10000, color='r', label='累计盈利', ax=ax1)
+    ax1.set_title('累计盈利曲线图', fontsize=16)
+    ax1.set_ylabel('盈利(万元)', fontsize=14)
+    ax1.tick_params(axis='x', rotation=45, labelsize=12)
+    ax1.tick_params(axis='y', labelsize=12)
     ax1.grid(True)
-    ax1.legend()
+    ax1.legend(fontsize=12)
 
     # 绘制每日盈利柱状图
     ax2.bar(df_daily_profit['交收日期'], df_daily_profit['盈亏'] / 10000,
             color=df_daily_profit['盈亏'].apply(lambda x: 'g' if x < 0 else 'r'))
-    ax2.set_title('每日盈利', loc='center')
-    ax2.set_xlabel('日期')
-    ax2.tick_params(axis='x', rotation=45)
-    ax2.set_ylabel('盈利(万元)')
+    ax2.set_title('每日盈利', loc='center', fontsize=16)
+    ax2.set_xlabel('日期', fontsize=14)
+    ax2.set_ylabel('盈利(万元)', fontsize=14)
+    ax2.tick_params(axis='x', rotation=45, labelsize=12)
+    ax2.tick_params(axis='y', labelsize=12)
     ax2.grid(True)
 
     # 设置 x 轴刻度格式化器
@@ -148,6 +157,12 @@ def visualize_profit(df_total_profit):
     # 添加点击事件,显示具体数值
     fig.canvas.mpl_connect('button_press_event', lambda event: on_click_show_profit(event, df_total_profit, fig, ax1))
     fig.canvas.mpl_connect('button_press_event', lambda event: on_click_show_profit(event, df_daily_profit, fig, ax2))
+
+    # 添加鼠标移动时的垂直参考线
+    min_date = df_total_profit['交收日期'].min()
+    vline1 = ax1.axvline(x=min_date, color='k', linestyle='-', linewidth=1)
+    vline2 = ax2.axvline(x=min_date, color='k', linestyle='-', linewidth=1)
+    fig.canvas.mpl_connect('motion_notify_event', lambda event: on_motion(event, fig, vline1, vline2))
 
     # 调整子图间距,让它们能够充满整个画布
     plt.subplots_adjust(hspace=0.5)
