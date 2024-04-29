@@ -141,11 +141,9 @@ def visualize_profit(df_total_profit):
     ax2.set_ylabel('盈利(万元)')
     ax2.grid(True)
 
-    # 设置 x 轴刻度范围
-    min_date = df_total_profit['交收日期'].min()
-    max_date = df_total_profit['交收日期'].max()
-    ax1.set_xlim(min_date, max_date)
-    ax2.set_xlim(min_date, max_date)
+    # 设置 x 轴刻度格式化器
+    ax1.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: format_date(x, pos, df_total_profit)))
+    ax2.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: format_date(x, pos, df_total_profit)))
 
     # 添加点击事件,显示具体数值
     fig.canvas.mpl_connect('button_press_event', lambda event: on_click_show_profit(event, df_total_profit, fig, ax1))
