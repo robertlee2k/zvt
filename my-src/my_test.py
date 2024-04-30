@@ -68,7 +68,73 @@
 #                                                 end_date='2016-01-05', adjust="")
 # print(stock_hist_df)
 
-import akshare as ak
+# import akshare as ak
+#
+# qfq_factor_df = ak.stock_zh_a_daily(symbol="sz002515", adjust="hfq-factor")
+# print(qfq_factor_df)
 
-qfq_factor_df = ak.stock_zh_a_daily(symbol="sz002515", adjust="hfq-factor")
-print(qfq_factor_df)
+import pandas as pd
+import plotly.graph_objects as go
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+import pandas as pd
+import numpy as np
+import datetime
+
+# 生成随机的股票数据
+tickers = ['AAPL', 'MSFT', 'AMZN']
+start_date = datetime.datetime(2022, 1, 1)
+end_date = datetime.datetime(2023, 4, 30)
+dates = pd.date_range(start_date, end_date)
+
+data = {}
+for ticker in tickers:
+    open_prices = np.random.uniform(100, 200, len(dates))
+    high_prices = open_prices + np.random.uniform(0, 20, len(dates))
+    low_prices = open_prices - np.random.uniform(0, 20, len(dates))
+    close_prices = open_prices + np.random.uniform(-10, 10, len(dates))
+    df = pd.DataFrame({
+        'Date': dates,
+        'Open': open_prices,
+        'High': high_prices,
+        'Low': low_prices,
+        'Close': close_prices
+    })
+    data[ticker] = df
+
+# 使用生成的数据绘制 K 线图
+# 您可以在这里继续完成您的 Dash 应用程序
+
+# 创建 Dash 应用程序
+app = dash.Dash(__name__)
+
+# 添加下拉菜单供用户选择股票代码
+app.layout = html.Div([
+    html.H1('股票 K 线图'),
+    dcc.Dropdown(
+        id='stock-dropdown',
+        options=[{'label': i, 'value': i} for i in tickers],
+        value='AAPL'
+    ),
+    dcc.Graph(id='stock-graph')
+])
+
+# 更新图表
+@app.callback(
+    dash.dependencies.Output('stock-graph', 'figure'),
+    [dash.dependencies.Input('stock-dropdown', 'value')])
+def update_graph(selected_ticker):
+    df = data[selected_ticker]
+    fig = go.Figure(data=[go.Candlestick(
+        x=df.index,
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close']
+    )])
+    fig.update_layout(title=f"{selected_ticker} 股价走势")
+    return fig
+
+if __name__ == "__main__":
+    app.run_server(debug=True)
