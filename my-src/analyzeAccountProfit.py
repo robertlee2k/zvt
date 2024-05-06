@@ -83,7 +83,7 @@ def draw_profit(start_date):
     stock_holding_records, df_account_profit = account_summary.load_account_summaries(start_date)
     df_total_profit = calcu_total_profit(df_account_profit)
 
-    visualize_profit_plotly(df_total_profit)
+    visualize_profit(df_total_profit)
 
 
 def annotate_profit(x, y, text, ax):
@@ -200,49 +200,49 @@ def get_sim_account_history(checkpoint_date):
 
     return account_summary.stockhold_history, account_summary.balance_history
 
-import plotly.graph_objects as go
-
-def visualize_profit_plotly(df_total_profit):
-    # 计算每日盈利
-    df_daily_profit = df_total_profit['盈亏'].diff()
-    df_daily_profit = pd.DataFrame({'交收日期': df_total_profit['交收日期'], '盈亏': df_daily_profit})
-
-    # 创建累计盈利曲线图
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_total_profit['交收日期'], y=df_total_profit['盈亏'] / 10000, mode='lines', name='累计盈利'))
-    fig.update_layout(
-        title='累计盈利曲线图',
-        xaxis_title='日期',
-        yaxis_title='盈利(万元)',
-        xaxis_tickangle=-45,
-        font=dict(size=12)
-    )
-
-    # 创建每日盈利柱状图
-    bar_width = 0.8
-
-    fig.add_trace(go.Bar(x=np.arange(len(df_daily_profit)), y=df_daily_profit['盈亏'] / 10000, width=bar_width,
-                        marker_color=['green' if x < 0 else 'red' for x in df_daily_profit['盈亏']], name='每日盈利'))
-    fig.update_layout(
-        title='每日盈利',
-        xaxis_title='日期',
-        yaxis_title='盈利(万元)',
-        xaxis_tickangle=-45,
-        font=dict(size=12)
-    )
-
-    # 添加点击事件,显示具体数值
-    fig.update_layout(
-        hoverlabel=dict(
-            bgcolor="white",
-            font_size=16,
-            font_family="Rockwell"
-        )
-    )
-
-    fig.add_trace(go.Scatter(x=[0], y=[0], mode='markers', visible=False))
-
-    fig.show()
+# import plotly.graph_objects as go
+#
+# def visualize_profit_plotly(df_total_profit):
+#     # 计算每日盈利
+#     df_daily_profit = df_total_profit['盈亏'].diff()
+#     df_daily_profit = pd.DataFrame({'交收日期': df_total_profit['交收日期'], '盈亏': df_daily_profit})
+#
+#     # 创建累计盈利曲线图
+#     fig = go.Figure()
+#     fig.add_trace(go.Scatter(x=df_total_profit['交收日期'], y=df_total_profit['盈亏'] / 10000, mode='lines', name='累计盈利'))
+#     fig.update_layout(
+#         title='累计盈利曲线图',
+#         xaxis_title='日期',
+#         yaxis_title='盈利(万元)',
+#         xaxis_tickangle=-45,
+#         font=dict(size=12)
+#     )
+#
+#     # 创建每日盈利柱状图
+#     bar_width = 0.8
+#
+#     fig.add_trace(go.Bar(x=np.arange(len(df_daily_profit)), y=df_daily_profit['盈亏'] / 10000, width=bar_width,
+#                         marker_color=['green' if x < 0 else 'red' for x in df_daily_profit['盈亏']], name='每日盈利'))
+#     fig.update_layout(
+#         title='每日盈利',
+#         xaxis_title='日期',
+#         yaxis_title='盈利(万元)',
+#         xaxis_tickangle=-45,
+#         font=dict(size=12)
+#     )
+#
+#     # 添加点击事件,显示具体数值
+#     fig.update_layout(
+#         hoverlabel=dict(
+#             bgcolor="white",
+#             font_size=16,
+#             font_family="Rockwell"
+#         )
+#     )
+#
+#     fig.add_trace(go.Scatter(x=[0], y=[0], mode='markers', visible=False))
+#
+#     fig.show()
 
 # 获取从startDate到今天的所有沪深股市交易日list
 def get_trade_dates(start_date):
