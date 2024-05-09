@@ -6,3 +6,4 @@ numpy~=1.26.4
 lxml~=5
 selenium~=4.18
 matplotlib~=3.8
+xlsxwriter

@@ -55,8 +55,9 @@ class StockPriceHistory:
             prev_date = stock_hold_df.loc[prev_date_idx]['交收日期']
             print(f'最近持仓日期{prev_date}')
             stock_hold_df = stock_hold_df[stock_hold_df['交收日期'] >= prev_date]
-            # 把持仓股票的交收日期改为start_date（因为在下面的代码里这个日期如果小于start_date会被过滤掉）
-            stock_hold_df['交收日期'] = start_date
+            # 根据最接近的持仓股票的交收日期修改start_date（因为在下面的代码里这个日期如果小于start_date会被过滤掉）
+            if prev_date < start_date:
+                start_date = prev_date
 
         stock_hold_df = stock_hold_df[["交收日期", "证券代码"]]
 
@@ -356,7 +357,7 @@ def get_hfq_prices():
 # Example usage
 if __name__ == "__main__":
     run_update_ak()
-# StockPriceHistory.cache_trade_dates() # 获取交易日的函数不用经常调用，每年调一次即可
+    # StockPriceHistory.cache_trade_dates() # 获取交易日的函数不用经常调用，每年调一次即可
 
 # StockPriceHistory.cache_hfq_factors(['002515','01024'])
 # get_hfq_prices()

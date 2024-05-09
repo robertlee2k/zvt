@@ -6,13 +6,36 @@ from gxTransHistory import StockTransHistory
 
 # 拆分逻辑：根据空格分隔拆分证券名称和证券代码
 def split_security(row):
-    parts = row['交易证券'].split()
+    """
+    将交易证券字符串拆分为两部分
+
+    Args:
+        row (dict): 包含'交易证券'键的字典
+
+    Returns:
+        tuple: 拆分后的两部分,如果无法拆分则返回原字符串和'-'
+    """
+    security = row['交易证券']
+
+    # 如果以'-'开头且后面是数字,则拆分为'-'和数字部分
+    if security.startswith('-') and security[1:].isdigit():
+        if len(security[1:]) < 6:
+            # 将数字部分补足为6位
+            num_part = security[1:].zfill(6)
+        else:
+            num_part= security[1:]
+        return security[0], num_part
+
+    # 否则尝试使用空格拆分
+    parts = security.split()
     if len(parts) == 2:
         return parts[0], parts[1]
-    elif len(parts) == 1 and parts[0].isdigit() and len(parts[0]) == 6:
+    # 如果只有一个部分且是数字,则拆分为数字和'-'
+    elif len(parts) == 1 and parts[0].isdigit():
         return parts[0], '-'
+    # 其他情况(代码里有空格的）,使用' '连接前面的部分,最后一部分单独返回
     else:
-        return '-'.join(parts[:-1]), parts[-1]
+        return ' '.join(parts[:-1]), parts[-1]
 
 
 # 分析交易流水记录并输出到csv文件

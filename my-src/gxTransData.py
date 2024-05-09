@@ -1,6 +1,6 @@
 import pandas as pd
 from openpyxl import load_workbook
-
+import os
 
 # 国信证券交易资金流水中根据摘要对成交数量和发生金额的处理系数定义
 class SummaryClassifier:
@@ -175,8 +175,11 @@ class AccountSummary:
     # 从 'analyze_summary.xlsx' 文件中加载历史的持仓记录
     @staticmethod
     def load_stockhold_from_file():
-        return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="股票持仓历史", header=0,
+        if os.path.exists(AccountSummary.ACCOUNT_SUMMARY_FILE):
+            return pd.read_excel(AccountSummary.ACCOUNT_SUMMARY_FILE, sheet_name="股票持仓历史", header=0,
                              dtype={'证券代码': str})
+        else:
+            return None
 
     # 从 'analyze_summary.xlsx' 文件中加载历史的账户余额记录
     @staticmethod

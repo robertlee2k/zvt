@@ -259,8 +259,8 @@ def get_trade_dates(start_date):
 
 
 def run():
-    start_date = pd.to_datetime('20230101', format='%Y%m%d')
-    # analyze_and_update(start_date)
+    start_date = pd.to_datetime('20070501', format='%Y%m%d')
+    analyze_and_update(start_date)
     draw_profit(start_date)
 
     # checkpoint_date = pd.to_datetime('20231124', format='%Y%m%d')
