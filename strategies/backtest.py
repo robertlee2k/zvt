@@ -6,7 +6,7 @@ import pandas as pd
 # 获取恒生科技指数数据
 stock_code = "01024"
 adjust_type = "hfq"
-start_date = '20200101'
+start_date = '20240101'
 end_date = '20241231'
 
 # 日线数据

@@ -43,9 +43,9 @@ class StrategyExecutor:
             # 最多持有0仓位
         ], default=0)
 
-        current_position = pd.Series(current_position, index=rets.index)
+        current_position_df = pd.Series(current_position, index=rets.index)
         # 获取上一期的头寸
-        previous_position = current_position.shift(1)
+        previous_position = current_position_df.shift(1).fillna(0).values
 
         # 计算策略收益率,扣除交易成本
         strategy_rets = rets * current_position - self.trading_cost * np.abs(current_position - previous_position)
@@ -53,11 +53,10 @@ class StrategyExecutor:
         # 记录每次策略执行的操作
         self.strategy_operations = defaultdict(list)
         cum_strategy_ret = 1
-        cum_excess_ret = 1
+        cum_bench_ret = 1
         for date, prev_pos, curr_pos, ret in zip(rets.index, previous_position, current_position, strategy_rets):
             cum_strategy_ret *= (1 + ret)
-            excess_ret = ret - rets.loc[pd.Timestamp(date)]
-            cum_excess_ret *= (1 + excess_ret)
+            cum_bench_ret *= (1 + rets.loc[pd.Timestamp(date)])
 
             position_change = curr_pos - prev_pos
             if position_change != 0 or date==rets.index[-1] or date==rets.index[0]:  # 只记录：有操作的日期、开始日期、结束日期
@@ -68,7 +67,7 @@ class StrategyExecutor:
                 else:
                     operation_type = "检查点"
                 self.strategy_operations[date.date()].append(
-                    (operation_type, position_change, curr_pos, cum_strategy_ret-1, cum_excess_ret-1))
+                    (operation_type, position_change, curr_pos, cum_strategy_ret-1, cum_bench_ret-1))
 
         # 返回策略收益率和头寸序列
         return strategy_rets, pd.Series(current_position, index=rets.index)
@@ -87,12 +86,12 @@ class StrategyExecutor:
             worksheet.title = "月线策略操作记录"
 
         # 写入表头
-        worksheet.append(["操作日期", "操作类型", "变化仓位","当前持仓", "累计收益率", "累计超额收益率"])
+        worksheet.append(["操作日期", "操作类型", "变化仓位","当前持仓", "累计收益率", "基准收益率"])
 
         # 记录策略操作
         for date, operations in sorted(self.strategy_operations.items()):
             for operation_type, position_change, current_position, strategy_ret, excess_ret in operations:
-                worksheet.append([date, operation_type, position_change, current_position,  f"{strategy_ret*100:.2f}%", f"{excess_ret*100:.2f}%"])
+                worksheet.append([date, operation_type, position_change, current_position,  f"{strategy_ret:.2f}", f"{excess_ret:.2f}"])
 
         # 保存Excel文件
         workbook.save(filename)
