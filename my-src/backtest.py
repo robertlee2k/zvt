@@ -95,8 +95,8 @@ def visualize_strategy_returns(strategy_rets, positions, benchmark_rets, title, 
 # 获取恒生科技指数数据
 stock_code = "01024"
 adjust_type = "hfq"
-start_date = '20220101'
-end_date = '20240601'
+start_date = '20230101'
+end_date = '20231201'
 
 # 日线数据
 hstech_daily = ak.stock_hk_hist(symbol=stock_code, period="daily", start_date=start_date,
@@ -120,7 +120,7 @@ daily_strategy_rets = pd.Series(daily_strategy_rets, index=hstech_daily_rets.ind
 daily_positions = pd.Series(daily_positions, index=hstech_daily_rets.index)
 
 # 可视化日线数据
-visualize_strategy_returns(daily_strategy_rets, daily_positions, hstech_daily_rets, 'Dynamic Trend Strategy Daily Returns', 'Returns')
+#visualize_strategy_returns(daily_strategy_rets, daily_positions, hstech_daily_rets, 'Dynamic Trend Strategy Daily Returns', 'Returns')
 
 # 周线数据
 hstech_weekly_rets = hstech_weekly["涨跌幅"]/100
@@ -131,7 +131,7 @@ weekly_strategy_rets = pd.Series(weekly_strategy_rets, index=hstech_weekly_rets.
 weekly_positions = pd.Series(weekly_positions, index=hstech_weekly_rets.index)
 
 # 可视化周线数据
-visualize_strategy_returns(weekly_strategy_rets, weekly_positions, hstech_weekly_rets, 'Dynamic Trend Strategy Weekly Returns', 'Returns')
+#visualize_strategy_returns(weekly_strategy_rets, weekly_positions, hstech_weekly_rets, 'Dynamic Trend Strategy Weekly Returns', 'Returns')
 
 # 月线数据
 hstech_monthly_rets = hstech_monthly["涨跌幅"]/100
@@ -142,14 +142,13 @@ monthly_strategy_rets = pd.Series(monthly_strategy_rets, index=hstech_monthly_re
 monthly_positions = pd.Series(monthly_positions, index=hstech_monthly_rets.index)
 
 # 可视化月线数据
-visualize_strategy_returns(monthly_strategy_rets, monthly_positions, hstech_monthly_rets, 'Dynamic Trend Strategy Monthly Returns', 'Returns')
+#visualize_strategy_returns(monthly_strategy_rets, monthly_positions, hstech_monthly_rets, 'Dynamic Trend Strategy Monthly Returns', 'Returns')
 
-# 计算策略表现
+
 def calculate_strategy_performance(strategy_rets, benchmark_rets, freq):
     strategy_rets = strategy_rets.dropna()
     benchmark_rets = benchmark_rets.dropna()
 
-    # 根据freq设置periods_per_year
     if freq == 'daily':
         periods_per_year = 252
     elif freq == 'weekly':
@@ -160,57 +159,52 @@ def calculate_strategy_performance(strategy_rets, benchmark_rets, freq):
     annualized_return = (1 + strategy_rets).prod() ** (periods_per_year / len(strategy_rets)) - 1
     benchmark_annualized_return = (1 + benchmark_rets).prod() ** (periods_per_year / len(benchmark_rets)) - 1
 
-    # 计算年化波动率
     annualized_volatility = strategy_rets.std() * np.sqrt(periods_per_year)
     benchmark_annualized_volatility = benchmark_rets.std() * np.sqrt(periods_per_year)
 
-    # 计算夏普比率
     risk_free_rate = 0  # 假设无风险利率为0
     annualized_excess_return = annualized_return - risk_free_rate
-    sharpe_ratio = annualized_excess_return / annualized_volatility
+    # 处理年化波动率为0的情况
+    if annualized_volatility == 0:
+         sharpe_ratio = np.nan
+    else:
+        sharpe_ratio = annualized_excess_return / annualized_volatility
 
-    # 计算最大回撤
     cum_rets = (1 + strategy_rets).cumprod()
     cum_max = cum_rets.cummax()
     drawdowns = (cum_max - cum_rets) / cum_max
     max_drawdown = drawdowns.max()
 
-    # 计算与基准的差异
+    benchmark_cum_rets = (1 + benchmark_rets).cumprod()
+    benchmark_cum_max = benchmark_cum_rets.cummax()
+    benchmark_drawdowns = (benchmark_cum_max - benchmark_cum_rets) / benchmark_cum_max
+    benchmark_max_drawdown = benchmark_drawdowns.max()
+
     excess_returns = strategy_rets - benchmark_rets
-    annualized_excess_return = (1 + excess_returns).prod() ** (periods_per_year / len(excess_returns)) - 1
+    annualized_excess_return= annualized_return - benchmark_annualized_return
+
+    if freq == 'daily':
+        print("日线数据回测结果:")
+    elif freq == 'weekly':
+        print("周线数据回测结果:")
+    else:
+        print("月线数据回测结果:")
+
+    print("-" * 30)
+    print("{:<20}{:<20}{:<20}".format('指标', '策略', '基准'))
+    print("-" * 30)
+    print("{:<20}{:<20.2%}{:<20.2%}".format('年化收益率', annualized_return, benchmark_annualized_return))
+    print("{:<20}{:<20.2%}{:<20.2%}".format('年化波动率', annualized_volatility, benchmark_annualized_volatility))
+    print("{:<20}{:<20.2f}{:<20.2f}".format('夏普比率', sharpe_ratio, (
+                benchmark_annualized_return - risk_free_rate) / benchmark_annualized_volatility))
+    print("{:<20}{:<20.2%}{:<20.2%}".format('最大回撤', max_drawdown, benchmark_max_drawdown))
+    print("{:<20}{:<20.2%}".format('年化超额收益率', annualized_excess_return))
+    print("-" * 30)
 
     return annualized_return, annualized_volatility, sharpe_ratio, max_drawdown, annualized_excess_return
+# 调用函数并传入freq参数
+calculate_strategy_performance(daily_strategy_rets, hstech_daily_rets, 'daily')
+calculate_strategy_performance(weekly_strategy_rets, hstech_weekly_rets, 'weekly')
+calculate_strategy_performance(monthly_strategy_rets, hstech_monthly_rets, 'monthly')
 
-
-# 日线数据回测结果
-daily_annualized_return, daily_annualized_volatility, daily_sharpe_ratio, daily_max_drawdown, daily_annualized_excess_return = calculate_strategy_performance(daily_strategy_rets, hstech_daily_rets, 'daily')
-
-print("日线数据回测结果:")
-print(f"年化收益率: {daily_annualized_return:.2%}")
-print(f"年化波动率: {daily_annualized_volatility:.2%}")
-print(f"夏普比率: {daily_sharpe_ratio:.2f}")
-print(f"最大回撤: {daily_max_drawdown:.2%}")
-print(f"相对于基准的年化超额收益率: {daily_annualized_excess_return:.2%}")
-print("-"*30)
-
-# 周线数据回测结果
-weekly_annualized_return, weekly_annualized_volatility, weekly_sharpe_ratio, weekly_max_drawdown, weekly_annualized_excess_return = calculate_strategy_performance(weekly_strategy_rets, hstech_weekly_rets, 'weekly')
-
-print("周线数据回测结果:")
-print(f"年化收益率: {weekly_annualized_return:.2%}")
-print(f"年化波动率: {weekly_annualized_volatility:.2%}")
-print(f"夏普比率: {weekly_sharpe_ratio:.2f}")
-print(f"最大回撤: {weekly_max_drawdown:.2%}")
-print(f"相对于基准的年化超额收益率: {weekly_annualized_excess_return:.2%}")
-print("-"*30)
-
-# 月线数据回测结果
-monthly_annualized_return, monthly_annualized_volatility, monthly_sharpe_ratio, monthly_max_drawdown, monthly_annualized_excess_return = calculate_strategy_performance(monthly_strategy_rets, hstech_monthly_rets, 'monthly')
-
-print("月线数据回测结果:")
-print(f"年化收益率: {monthly_annualized_return:.2%}")
-print(f"年化波动率: {monthly_annualized_volatility:.2%}")
-print(f"夏普比率: {monthly_sharpe_ratio:.2f}")
-print(f"最大回撤: {monthly_max_drawdown:.2%}")
-print(f"相对于基准的年化超额收益率: {monthly_annualized_excess_return:.2%}")
 
