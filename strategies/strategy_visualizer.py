@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class StrategyVisualizer:
-    def visualize_strategy_returns(self, strategy_rets, positions, benchmark_rets, title, ylabel):
+    def visualize_strategy_returns(self, strategy_rets, benchmark_rets, title, ylabel):
         fig, axs = plt.subplots(2, 1, figsize=(16, 9), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
 
         # 绘制单期收益率
@@ -21,13 +21,13 @@ class StrategyVisualizer:
         axs[1].set_xlabel('Date')
         axs[1].set_ylabel('Cumulative Returns')
 
-        # 绘制策略持仓百分比
-        ax_twin = axs[0].twinx()
-        ax_twin.plot(positions.index, positions.values, color='g', label='Position Percentage')
-        ax_twin.axhline(y=0, color='k', linestyle='--')
-        ax_twin.axhline(y=1, color='k', linestyle='--')
-        ax_twin.set_ylim(-1.1, 1.1)
-        ax_twin.legend(loc='upper left')
+        # # 绘制策略持仓百分比
+        # ax_twin = axs[0].twinx()
+        # ax_twin.plot(positions.index, positions.values, color='g', label='Position Percentage')
+        # ax_twin.axhline(y=0, color='k', linestyle='--')
+        # ax_twin.axhline(y=1, color='k', linestyle='--')
+        # ax_twin.set_ylim(-1.1, 1.1)
+        # ax_twin.legend(loc='upper left')
 
         plt.tight_layout()
         plt.show()
