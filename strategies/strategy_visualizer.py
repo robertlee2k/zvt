@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import mplfinance as mpf
+from strategy_planner import StrategyPlanner
 
 class StrategyVisualizer:
     def visualize_strategy_returns(self,daily_returns , benchmark_rets, title, ylabel):
@@ -92,3 +94,41 @@ class StrategyVisualizer:
         print("-" * 30)
 
         return annualized_return, annualized_volatility, sharpe_ratio, max_drawdown, annualized_excess_return
+
+
+    def visualize_plan(self,strategy_planner:StrategyPlanner,hstech_his_price):
+        # 绘制K线图和标记
+        fig, ax = plt.subplots(figsize=(12, 8))
+        # 重命名列名
+        hstech_his_price = hstech_his_price.rename(columns={
+            "开盘": "open",
+            "收盘": "close",
+            "最高": "high",
+            "最低": "low",
+            "成交量": "volume"
+        })
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+        plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+        mpf.plot(hstech_his_price, type='candle', ax=ax, style='charles', volume=False)
+
+        # 标记市场状态
+        colors = ['gray', 'green', 'yellow', 'red', 'blue']
+        labels = ['未定义', '牛市', '修正', '熊市', '反弹']
+        for market_state in strategy_planner.get_market_states():
+            date, stock, state = market_state
+            idx = hstech_his_price.index.get_loc(date)
+            ax.axvline(x=idx, color=colors[state], linestyle='--', linewidth=0.5)
+        # 标记交易计划
+        for operation in strategy_planner.get_trading_operations():
+            date, stock, position = operation
+            if position > 0:
+                idx = hstech_his_price.index.get_loc(date)
+                ax.annotate('买入', xy=(idx, hstech_his_price.loc[date, 'close']),
+                            xytext=(idx, hstech_his_price.loc[date, 'close'] + 0.5),
+                            arrowprops=dict(facecolor='green', shrink=0.05))
+        # 防止重复标签
+        handles, labels = ax.get_legend_handles_labels()
+        unique_labels = dict(zip(labels, handles))
+        ax.legend(unique_labels.values(), unique_labels.keys())
+        plt.title('市场状态与交易计划')
+        plt.show()

@@ -194,14 +194,19 @@ class TraderSimulator:
         self.trades.append((date, (position_change, price, self.trading_cost * abs(position_change))))
 
     def simulate_trading(self, trading_operations, prices):
+
         # 对trading_operations和prices进行日期升序排序
         trading_operations = sorted(trading_operations, key=lambda x: x[0])
         prices = prices.sort_index()
 
+        # 用开盘价作为成交价 (因为我们的交易计划是根据上一个周期的数据算出来，一早开始执行的）
+        trading_prices = prices['开盘']
+        booking_prices = prices['收盘']
+
         before_the_date = trading_operations[0][0]
 
         for date, stock_code, position in trading_operations:
-            price = prices.loc[date]
+            price = trading_prices.loc[date]
             # 获取目标持股数量
             target_shares = int(position * self.portfolio_value / price // 100 * 100)
             stock_quantity = self.get_holding_position(before_the_date, self.stock_code)
@@ -210,7 +215,8 @@ class TraderSimulator:
 
             self.execute_trade(date, operating_shares, price)
 
-        self.cal_daily_returns(prices)
+        # 收益率计算，需要收盘价
+        self.cal_daily_returns(booking_prices)
 
         return self.daily_returns
 
