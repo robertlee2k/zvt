@@ -47,10 +47,10 @@ class StrategyPlanner:
             market_state == 3,  # 本期为熊市
             market_state == 4  # 本期为反弹
         ], [
-            slow_mom,  # 全仓多头
-            (1 - self.aCo) * slow_mom + self.aCo * fast_mom,  # 部分多头
+            (slow_mom >= 0).astype(int),  # 按慢速信号持仓
+            (1 - self.aCo) * (slow_mom >= 0).astype(int) + self.aCo * (fast_mom >= 0).astype(int),  # 混合慢快信号持仓
             0,  # 不持仓
-            np.maximum(0, (1 - self.aRe) * slow_mom + self.aRe * fast_mom)  # 部分多头,最多持有0仓位
+            np.maximum(0, (1 - self.aRe) * (slow_mom >= 0).astype(int) + self.aRe * (fast_mom >= 0).astype(int))
             # 最多持有0仓位
         ], default=0)
 
