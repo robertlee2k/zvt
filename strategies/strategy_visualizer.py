@@ -1,13 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import mplfinance as mpf
+import pandas as pd
 from strategy_planner import StrategyPlanner
 
-class StrategyVisualizer:
-    def visualize_strategy_returns(self,daily_returns , benchmark_rets, title, ylabel):
 
-        strategy_rets=daily_returns['daily_return']
-        positions=daily_returns['position_ratio']
+class StrategyVisualizer:
+    def visualize_strategy_returns(self, daily_returns, benchmark_rets, title, ylabel):
+
+        strategy_rets = daily_returns['daily_return']
+        positions = daily_returns['position_ratio']
         fig, axs = plt.subplots(2, 1, figsize=(16, 9), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
 
         # 绘制单期收益率
@@ -58,7 +60,7 @@ class StrategyVisualizer:
         annualized_excess_return = annualized_return - risk_free_rate
         # 处理年化波动率为0的情况
         if annualized_volatility == 0:
-             sharpe_ratio = np.nan
+            sharpe_ratio = np.nan
         else:
             sharpe_ratio = annualized_excess_return / annualized_volatility
 
@@ -73,7 +75,7 @@ class StrategyVisualizer:
         benchmark_max_drawdown = benchmark_drawdowns.max()
 
         excess_returns = strategy_rets - benchmark_rets
-        annualized_excess_return= annualized_return - benchmark_annualized_return
+        annualized_excess_return = annualized_return - benchmark_annualized_return
 
         if freq == 'daily':
             print("日线数据回测结果:")
@@ -88,15 +90,14 @@ class StrategyVisualizer:
         print("{:<20}{:<20.2%}{:<20.2%}".format('年化收益率', annualized_return, benchmark_annualized_return))
         print("{:<20}{:<20.2%}{:<20.2%}".format('年化波动率', annualized_volatility, benchmark_annualized_volatility))
         print("{:<20}{:<20.2f}{:<20.2f}".format('夏普比率', sharpe_ratio, (
-                    benchmark_annualized_return - risk_free_rate) / benchmark_annualized_volatility))
+                benchmark_annualized_return - risk_free_rate) / benchmark_annualized_volatility))
         print("{:<20}{:<20.2%}{:<20.2%}".format('最大回撤', max_drawdown, benchmark_max_drawdown))
         print("{:<20}{:<20.2%}".format('年化超额收益率', annualized_excess_return))
         print("-" * 30)
 
         return annualized_return, annualized_volatility, sharpe_ratio, max_drawdown, annualized_excess_return
 
-
-    def visualize_plan(self,strategy_planner:StrategyPlanner,hstech_his_price):
+    def visualize_plan(self, strategy_planner: StrategyPlanner, hstech_his_price):
         # 绘制K线图和标记
         fig, ax = plt.subplots(figsize=(12, 8))
         # 重命名列名
@@ -107,28 +108,85 @@ class StrategyVisualizer:
             "最低": "low",
             "成交量": "volume"
         })
+
+        hstech_his_price.index = pd.to_datetime(hstech_his_price.index)
+
+        # 自定义样式
+        mc = mpf.make_marketcolors(up='red', down='green', wick={'up': 'red', 'down': 'green'},
+                                   edge={'up': 'red', 'down': 'green'})
+        s = mpf.make_mpf_style(marketcolors=mc)
         plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
         plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
-        mpf.plot(hstech_his_price, type='candle', ax=ax, style='charles', volume=False)
+        mpf.plot(hstech_his_price, type='candle', ax=ax, style=s, volume=False)
 
         # 标记市场状态
-        colors = ['gray', 'green', 'yellow', 'red', 'blue']
+        # 牛市(Bull Market): 使用 # FF9999 (较深的淡红)
+        # 修正(Correction): 使用  # B0E57C (浅绿)
+        # 熊市(Bear Market): 使用  # 90EE90 (浅绿)
+        # 反弹(Rebound): 使用    # FFC1C1 (淡红色)
+        colors = ['gray', '#FF9999', '#B0E57C', '#90EE90', '#FFC1C1']
         labels = ['未定义', '牛市', '修正', '熊市', '反弹']
-        for market_state in strategy_planner.get_market_states():
+        font_colors = ['black', 'red', 'green', 'green', 'red']
+        market_states = strategy_planner.get_market_states()
+        start_idx = None
+        end_idx = None
+        current_state = None
+
+        for i, market_state in enumerate(market_states):
             date, stock, state = market_state
             idx = hstech_his_price.index.get_loc(date)
-            ax.axvline(x=idx, color=colors[state], linestyle='--', linewidth=0.5)
+
+            if current_state is None:
+                start_idx = idx
+                current_state = state
+            elif state != current_state:
+                end_idx = idx
+                ax.axvspan(start_idx, end_idx, color=colors[current_state], alpha=0.3)
+                mid_idx = (start_idx + end_idx) // 2
+                ax.text(mid_idx, hstech_his_price['high'].max() * 1.05, labels[current_state],
+                        color=font_colors[current_state], fontsize=10, ha='center')
+                start_idx = idx
+                current_state = state
+
+        # 处理最后一个区间
+        if start_idx is not None and current_state is not None:
+            ax.axvspan(start_idx, hstech_his_price.index.size - 1, color=colors[current_state], alpha=0.3)
+            mid_idx = (start_idx + hstech_his_price.index.size - 1) // 2
+            ax.text(mid_idx, hstech_his_price['high'].max() * 1.05, labels[current_state],
+                    color=font_colors[current_state], fontsize=10, ha='center')
+
         # 标记交易计划
+        previous_position = None
+        dates = []
+        positions = []
+
         for operation in strategy_planner.get_trading_operations():
             date, stock, position = operation
-            if position > 0:
-                idx = hstech_his_price.index.get_loc(date)
-                ax.annotate('买入', xy=(idx, hstech_his_price.loc[date, 'close']),
-                            xytext=(idx, hstech_his_price.loc[date, 'close'] + 0.5),
-                            arrowprops=dict(facecolor='green', shrink=0.05))
-        # 防止重复标签
-        handles, labels = ax.get_legend_handles_labels()
-        unique_labels = dict(zip(labels, handles))
-        ax.legend(unique_labels.values(), unique_labels.keys())
+            idx = hstech_his_price.index.get_loc(date)
+            dates.append(idx)
+            positions.append(position)
+
+            if previous_position is not None:
+                change = round(position - previous_position, 2)
+                if change > 0:
+                    ax.annotate(f'↑ {change:.2f}', xy=(idx, hstech_his_price.loc[date, 'open']),
+                                xytext=(idx, hstech_his_price.loc[date, 'open'] - 1),
+                                arrowprops=dict(facecolor='red', shrink=0.05),
+                                fontsize=8, color='red', ha='center', va='top')
+                elif change < 0:
+                    ax.annotate(f'↓ {-change:.2f}', xy=(idx, hstech_his_price.loc[date, 'open']),
+                                xytext=(idx, hstech_his_price.loc[date, 'open'] + 1),
+                                arrowprops=dict(facecolor='green', shrink=0.05),
+                                fontsize=8, color='green', ha='center', va='bottom')
+            previous_position = position
+
+        # 绘制实际仓位的背景线
+        ax2 = ax.twinx()
+        ax2.plot(dates, positions, color='blue', linestyle='-', linewidth=0.5, alpha=0.3)
+        ax2.set_ylabel('仓位')
+        ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.2f}'))
+        ax2.grid(False)  # 隐藏背景线的网格
+        ax2.set_yticks([])  # 隐藏背景线的Y轴刻度
+
         plt.title('市场状态与交易计划')
         plt.show()

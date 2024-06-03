@@ -10,9 +10,9 @@ MONTHLY='monthly'
 # 获取恒生科技指数数据
 stock_code = "01024"
 adjust_type = "hfq"
-start_date = '20240101'
+start_date = '20230801'
 end_date = '20241231'
-frequency = DAILY
+frequency = WEEKLY
 
 # k线数据
 hstech_his = ak.stock_hk_hist(symbol=stock_code, period=frequency, start_date=start_date,
