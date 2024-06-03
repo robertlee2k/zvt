@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import openpyxl
 
 
 class TraderSimulator:
@@ -130,7 +129,7 @@ class TraderSimulator:
             return
         is_sell = False
         self._insert_chengjiao_record(price, num, date, is_sell)
-        row = self._prepare_chichang_record(self.stock_code,num, price)
+        row = self._prepare_chichang_record(self.stock_code, num, price)
         if (self.df_stock['证券代码'] == self.stock_code).any():
             index = self.df_stock[self.df_stock['证券代码'] == self.stock_code].index[0]
             self._update_stock_chengben(price, num, is_sell)
@@ -145,7 +144,7 @@ class TraderSimulator:
         # 将当前持仓情况及日期添加到 df_stock_history
         self.append_stock_history(date, self.df_stock)
 
-    def _prepare_chichang_record(self,stock_code, num, price):
+    def _prepare_chichang_record(self, stock_code, num, price):
         # 初始化一条空记录
         row = dict.fromkeys(self.stock_dtypes.keys(), '')
         row['证券代码'] = stock_code
@@ -269,17 +268,4 @@ class TraderSimulator:
         self.daily_returns = pd.DataFrame(self.daily_returns,
                                           columns=['date', 'portfolio_value', 'position_ratio', 'daily_return'])
         self.daily_returns.set_index('date', inplace=True)
-        self.daily_returns.to_excel("strategy_account_status.xlsx")
-
-    def save_account_daily_status(self):
-        # 保存交易记录和收益率到Excel文件
-        workbook = openpyxl.Workbook()
-        worksheet = workbook.active
-        worksheet.title = "模拟账户状况"
-        # 写入表头
-        worksheet.append(["交易日期", "当前仓位", "当日总市值", "当日收益率"])
-        # 记录交易操作
-        for date, position_ratio, portfolio_value, daily_return in self.daily_returns:
-            worksheet.append([date, f"{position_ratio:.4f}", f"{portfolio_value:.4f}", f"{daily_return:.4f}"])
-        # 保存Excel文件
-        workbook.save("strategy_account_status.xlsx")
+        self.daily_returns.to_excel("../output-files/strategy_account_status.xlsx")

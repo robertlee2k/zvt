@@ -43,9 +43,9 @@ class StrategyVisualizer:
         strategy_rets = strategy_rets.dropna()
         benchmark_rets = benchmark_rets.dropna()
 
-        if freq == 'daily':
+        if freq == StrategyPlanner.DAILY:
             periods_per_year = 252
-        elif freq == 'weekly':
+        elif freq == StrategyPlanner.WEEKLY:
             periods_per_year = 52
         else:
             periods_per_year = 12
@@ -125,7 +125,7 @@ class StrategyVisualizer:
         # 熊市(Bear Market): 使用  # 90EE90 (浅绿)
         # 反弹(Rebound): 使用    # FFC1C1 (淡红色)
         colors = ['gray', '#FF9999', '#B0E57C', '#90EE90', '#FFC1C1']
-        labels = ['未定义', '牛市', '修正', '熊市', '反弹']
+        labels = StrategyPlanner.MARKET_STAGES  # ['未定义', '牛市', '修正', '熊市', '反弹']
         font_colors = ['black', 'red', 'green', 'green', 'red']
         market_states = strategy_planner.get_market_states()
         start_idx = None
@@ -133,9 +133,9 @@ class StrategyVisualizer:
         current_state = None
 
         for i, market_state in enumerate(market_states):
-            date, stock, state = market_state
+            date, stock, state_str = market_state
             idx = hstech_his_price.index.get_loc(date)
-
+            state = StrategyPlanner.MARKET_STAGES.index(state_str)
             if current_state is None:
                 start_idx = idx
                 current_state = state
@@ -170,14 +170,14 @@ class StrategyVisualizer:
                 change = round(position - previous_position, 2)
                 if change > 0:
                     ax.annotate(f'↑ {change:.2f}', xy=(idx, hstech_his_price.loc[date, 'open']),
-                                xytext=(idx, hstech_his_price.loc[date, 'open'] - 1),
+                                xytext=(idx, hstech_his_price.loc[date, 'open'] - 2),
                                 arrowprops=dict(facecolor='red', shrink=0.05),
-                                fontsize=8, color='red', ha='center', va='top')
+                                fontsize=8, color='black', ha='center', va='top')
                 elif change < 0:
-                    ax.annotate(f'↓ {-change:.2f}', xy=(idx, hstech_his_price.loc[date, 'open']),
-                                xytext=(idx, hstech_his_price.loc[date, 'open'] + 1),
+                    ax.annotate(f'↓ {change:.2f}', xy=(idx, hstech_his_price.loc[date, 'open']),
+                                xytext=(idx, hstech_his_price.loc[date, 'open'] + 2),
                                 arrowprops=dict(facecolor='green', shrink=0.05),
-                                fontsize=8, color='green', ha='center', va='bottom')
+                                fontsize=8, color='black', ha='center', va='bottom')
             previous_position = position
 
         # 绘制实际仓位的背景线

@@ -18,9 +18,10 @@ hstech_his = ak.stock_hk_hist(symbol=stock_code, period=frequency, start_date=st
                               end_date=end_date, adjust=adjust_type)
 hstech_his.index = pd.to_datetime(hstech_his['日期'])
 hstech_his["涨跌幅"] = hstech_his["涨跌幅"] / 100
-data = hstech_his[['涨跌幅']]
 # 重命名 '涨跌幅' 字段为 '收益率'
-data.rename(columns={'涨跌幅': '收益率'}, inplace=True)
+hstech_his.rename(columns={'涨跌幅': '收益率'}, inplace=True)
+data = hstech_his[['收益率']]
+
 
 # 定义动量信号计算
 def calculate_momentum(data, window):
@@ -49,23 +50,34 @@ momentum_fast = calculate_momentum(data, fast_window)
 # 获取市场状态
 market_state = get_market_state(momentum_slow, momentum_fast)
 # 将市场状态拼接到原始数据中
-data['市场状态'] = market_state
+data = pd.concat([data, market_state], axis=1)
+
 #window = 30  # 使用过去30个月的数据
 
 
-# 计算归一化因子 C
-def calculate_normalization_factor(returns, lookback_months):
-    # 确保数据量足够进行计算
-    if len(returns) < lookback_months:
-        return np.nan
+def calculate_normalization_factor(returns, lookback_periods):
+    """
+    计算归一化因子。确保有足够的数据，如果不够，则使用现有的数据。
 
-    # 取最近 lookback_months 的数据
-    past_returns = returns.iloc[-lookback_months:]
-    past_market_state = returns.iloc[-lookback_months:]['市场状态']
+    参数：
+    returns: pandas.Series，资产的回报率
+    lookback_periods: int，回溯期长度（这是用历史统计数据来看股票的长短趋势，按直觉判断，日线应该用250，周线用52，年线用12）
+
+    返回值：
+    归一化因子（标量）
+    """
+    # 如果数据量不足，使用已有全部的数据
+    if len(returns) < lookback_periods:
+        past_returns = returns
+    else:
+        # 取最近 lookback_periods 的数据
+        past_returns = returns.iloc[-lookback_periods:]
+
+    past_market_state = returns.iloc[-lookback_periods:]['市场状态']
 
     # 计算频率
-    freq_bu = np.sum(past_market_state == 'Bull') / lookback_months
-    freq_be = np.sum(past_market_state == 'Bear') / lookback_months
+    freq_bu = np.sum(past_market_state == 'Bull') / lookback_periods
+    freq_be = np.sum(past_market_state == 'Bear') / lookback_periods
     freq_bu_or_be = freq_bu + freq_be
 
     # 计算平均回报率
@@ -89,12 +101,12 @@ def calculate_aCo_aRe(returns):
     aCo_series = pd.Series(index=returns.index)
     aRe_series = pd.Series(index=returns.index)
     # 计算C用
-    lookback_months = 30
+    lookback_periods = 52
 
     for date in returns.index:
         # 先算C
         returns_before_the_date = returns.loc[:date]
-        C = calculate_normalization_factor(returns_before_the_date, lookback_months)
+        C = calculate_normalization_factor(returns_before_the_date, lookback_periods)
         C_series[date] = C
 
         # 再算aCo
@@ -109,6 +121,8 @@ def calculate_aCo_aRe(returns):
         avg_return_square_re = (returns_re['收益率'] ** 2).mean()
         a_re = 0.5 * (1 - (1 / C) * (avg_return_re / avg_return_square_re))
         aRe_series[date] = a_re
+    aRe_series=aRe_series.clip(0,1)
+    aCo_series=aCo_series.clip(0,1)
     return aCo_series, aRe_series, C_series
 
 
