@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import openpyxl
+import akshare as ak
 
 
 # ***** 需要特别注意 *******
@@ -9,7 +10,6 @@ import openpyxl
 # 生成批量计划时， 我们采用的是current_position[i-1]: 这样，我们在生成交易操作时使用的是前一天的头寸，
 # 这样可以模拟我们是确保在每个交易日开盘前做出决策，而不使用未来的数据。
 
-
 class StrategyPlanner:
     MARKET_STAGES = ['Unknown', 'Bull', 'Correction', 'Bear', 'Rebound']
     DAILY = 'daily'
@@ -17,22 +17,28 @@ class StrategyPlanner:
     MONTHLY = 'monthly'
 
     def __init__(self, frequency):
+        self.frequency=frequency
         self.lookback_periods, self.slow_window, self.fast_window = self._define_window_periods(frequency)
         self.aCo_Series = None
         self.aRe_Series = None
         self.market_states = None
         self.plan = None
 
+        self.start_date = None   # 策略开始运行的日期
+        self.warmup_date = None  # 为了计算各种指标数据，需要提前准备的数据
+        self.history_rets = None # 策略所需要的行情数据，注意，这个里面包含了warmup_date开始的数据
+
+
     @staticmethod
     def _define_window_periods(frequency):
 
         if frequency == StrategyPlanner.DAILY:
             lookback_periods = 200
-            slow_window = 60
-            fast_window = 10
+            slow_window = 200
+            fast_window = 20
         elif frequency == StrategyPlanner.WEEKLY:
             lookback_periods = 52
-            slow_window = 24
+            slow_window = 52
             fast_window = 4
         elif frequency == StrategyPlanner.MONTHLY:
             lookback_periods = 12
@@ -43,6 +49,21 @@ class StrategyPlanner:
             slow_window = 12
             fast_window = 2
         return lookback_periods, slow_window, fast_window
+
+    def prepare_backtest_data(self, adjust_type, start_date, end_date, stock_code):
+        self.start_date = start_date
+
+        # k线数据
+        hstech_his = ak.stock_hk_hist(symbol=stock_code, period=self.frequency, start_date=start_date,
+                                      end_date=end_date, adjust=adjust_type)
+        hstech_his.index = pd.to_datetime(hstech_his['日期'])
+        hstech_his["涨跌幅"] = hstech_his["涨跌幅"] / 100
+        # 重命名 '涨跌幅' 字段为 '收益率'
+        hstech_his.rename(columns={'涨跌幅': '收益率'}, inplace=True)
+        hstech_his_rets = hstech_his[['收益率']]
+        hstech_his_prices = hstech_his[["开盘", "收盘", "最高", "最低", "成交量"]]
+        self.history_rets=hstech_his_rets
+        return hstech_his_prices, hstech_his_rets
 
     def get_market_states(self):
         return self.market_states
@@ -162,7 +183,9 @@ class StrategyPlanner:
                     date] * fast_mom
         return dynamic_positions
 
-    def generate_trading_operations(self, stock_code, data):
+    def generate_trading_operations(self, stock_code):
+        # 使用已缓存好的数据
+        data = self.history_rets
         # 计算慢速和快速动量信号
         momentum_slow = self._cal_momentum(data['收益率'], self.slow_window)
         momentum_slow = momentum_slow.rename('长期收益率')
