@@ -25,8 +25,8 @@ class StrategyPlanner:
         self.plan = None
 
         self.start_date = None   # 策略开始运行的日期
-        self.warmup_date = None  # 为了计算各种指标数据，需要提前准备的数据
-        self.history_rets = None # 策略所需要的行情数据，注意，这个里面包含了warmup_date开始的数据
+        self.warmup_start_date = None  # 为了计算各种指标数据，需要提前准备的数据
+        self.history_rets = None  # 策略所需要的行情数据，注意，这个里面包含了warmup_date开始的数据
 
 
     @staticmethod
@@ -53,8 +53,19 @@ class StrategyPlanner:
     def prepare_backtest_data(self, adjust_type, start_date, end_date, stock_code):
         self.start_date = start_date
 
+        df_trade_dates = pd.read_pickle('../stock/trade_dates.pkl')
+        # 找到离start_date最近的index
+        nearest_index = df_trade_dates['trade_date'].searchsorted(start_date)
+        self.start_date=nearest_index
+        warmup_period = self.lookback_periods + self.slow_window
+        # 从该索引向前移动warmup_period长度
+        warmup_index = max(0, nearest_index - warmup_period)
+        warmup_start_date = df_trade_dates.iloc[warmup_index]['trade_date']
+        self.warmup_start_date = warmup_start_date
+
+
         # k线数据
-        hstech_his = ak.stock_hk_hist(symbol=stock_code, period=self.frequency, start_date=start_date,
+        hstech_his = ak.stock_hk_hist(symbol=stock_code, period=self.frequency, start_date=warmup_start_date,
                                       end_date=end_date, adjust=adjust_type)
         hstech_his.index = pd.to_datetime(hstech_his['日期'])
         hstech_his["涨跌幅"] = hstech_his["涨跌幅"] / 100
@@ -63,7 +74,7 @@ class StrategyPlanner:
         hstech_his_rets = hstech_his[['收益率']]
         hstech_his_prices = hstech_his[["开盘", "收盘", "最高", "最低", "成交量"]]
         self.history_rets=hstech_his_rets
-        return hstech_his_prices, hstech_his_rets
+        return hstech_his_prices[start_date:], hstech_his_rets[start_date:]
 
     def get_market_states(self):
         return self.market_states
@@ -156,8 +167,7 @@ class StrategyPlanner:
         return aCo_series, aRe_series, C_series
 
     # 计算动态趋势策略仓位
-    @staticmethod
-    def _cal_dynamic_positions(data, aCo, aRe, momentum_slow, momentum_fast):
+    def _cal_dynamic_positions(self, data, aCo, aRe, momentum_slow, momentum_fast):
         dynamic_positions = pd.DataFrame(index=data.index, columns=['仓位'])
         for date in data.index:
             state = data.loc[date]['市场状态']
@@ -181,7 +191,7 @@ class StrategyPlanner:
             elif state == 'Rebound':
                 dynamic_positions.loc[date] = (1 - aRe.loc[date]) * slow_mom + aRe.loc[
                     date] * fast_mom
-        return dynamic_positions
+        return dynamic_positions[self.start_date:] #只返回目标日期之后的
 
     def generate_trading_operations(self, stock_code):
         # 使用已缓存好的数据
