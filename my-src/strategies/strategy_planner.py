@@ -51,12 +51,13 @@ class StrategyPlanner:
         return lookback_periods, slow_window, fast_window
 
     def prepare_backtest_data(self, adjust_type, start_date, end_date, stock_code):
-        self.start_date = start_date
+        start_date = pd.to_datetime(start_date)
 
         df_trade_dates = pd.read_pickle('../stock/trade_dates.pkl')
         # 找到离start_date最近的index
         nearest_index = df_trade_dates['trade_date'].searchsorted(start_date)
-        self.start_date=nearest_index
+        self.start_date=df_trade_dates.iloc[nearest_index]['trade_date']
+
         warmup_period = self.lookback_periods + self.slow_window
         # 从该索引向前移动warmup_period长度
         warmup_index = max(0, nearest_index - warmup_period)
@@ -67,7 +68,11 @@ class StrategyPlanner:
         # k线数据
         hstech_his = ak.stock_hk_hist(symbol=stock_code, period=self.frequency, start_date=warmup_start_date,
                                       end_date=end_date, adjust=adjust_type)
+
         hstech_his.index = pd.to_datetime(hstech_his['日期'])
+        # 如果历史数据不足，则 有多少用多少
+        if hstech_his.index[0] > self.warmup_start_date:
+            self.warmup_start_date =hstech_his.index[0]
         hstech_his["涨跌幅"] = hstech_his["涨跌幅"] / 100
         # 重命名 '涨跌幅' 字段为 '收益率'
         hstech_his.rename(columns={'涨跌幅': '收益率'}, inplace=True)
