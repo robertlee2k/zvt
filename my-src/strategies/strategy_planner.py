@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import openpyxl
-import akshare as ak
+from market_data_helper import MarketDataHelper
 
 
 # ***** 需要特别注意 *******
@@ -17,17 +17,16 @@ class StrategyPlanner:
     MONTHLY = 'monthly'
 
     def __init__(self, frequency):
-        self.frequency=frequency
+        self.frequency = frequency
         self.lookback_periods, self.slow_window, self.fast_window = self._define_window_periods(frequency)
         self.aCo_Series = None
         self.aRe_Series = None
         self.market_states = None
         self.plan = None
 
-        self.start_date = None   # 策略开始运行的日期
+        self.start_date = None  # 策略开始运行的日期
         self.warmup_start_date = None  # 为了计算各种指标数据，需要提前准备的数据
         self.history_rets = None  # 策略所需要的行情数据，注意，这个里面包含了warmup_date开始的数据
-
 
     @staticmethod
     def _define_window_periods(frequency):
@@ -53,10 +52,10 @@ class StrategyPlanner:
     def prepare_backtest_data(self, adjust_type, start_date, end_date, stock_code):
         start_date = pd.to_datetime(start_date)
 
-        df_trade_dates = pd.read_pickle('../stock/trade_dates.pkl')
+        df_trade_dates = MarketDataHelper.get_trade_dates()
         # 找到离start_date最近的index
         nearest_index = df_trade_dates['trade_date'].searchsorted(start_date)
-        self.start_date=df_trade_dates.iloc[nearest_index]['trade_date']
+        self.start_date = df_trade_dates.iloc[nearest_index]['trade_date']
 
         warmup_period = self.lookback_periods + self.slow_window
         # 从该索引向前移动warmup_period长度
@@ -64,21 +63,21 @@ class StrategyPlanner:
         warmup_start_date = df_trade_dates.iloc[warmup_index]['trade_date']
         self.warmup_start_date = warmup_start_date
 
-
         # k线数据
-        hstech_his = ak.stock_hk_hist(symbol=stock_code, period=self.frequency, start_date=warmup_start_date,
-                                      end_date=end_date, adjust=adjust_type)
+        hstech_his = MarketDataHelper.query_akshare(symbol=stock_code, period=self.frequency,
+                                                    start_date=warmup_start_date,
+                                                    end_date=end_date, adjust=adjust_type)
 
         hstech_his.index = pd.to_datetime(hstech_his['日期'])
         # 如果历史数据不足，则 有多少用多少
         if hstech_his.index[0] > self.warmup_start_date:
-            self.warmup_start_date =hstech_his.index[0]
+            self.warmup_start_date = hstech_his.index[0]
         hstech_his["涨跌幅"] = hstech_his["涨跌幅"] / 100
         # 重命名 '涨跌幅' 字段为 '收益率'
         hstech_his.rename(columns={'涨跌幅': '收益率'}, inplace=True)
         hstech_his_rets = hstech_his[['收益率']]
         hstech_his_prices = hstech_his[["开盘", "收盘", "最高", "最低", "成交量"]]
-        self.history_rets=hstech_his_rets
+        self.history_rets = hstech_his_rets
         return hstech_his_prices[start_date:], hstech_his_rets[start_date:]
 
     def get_market_states(self):
@@ -159,14 +158,21 @@ class StrategyPlanner:
             returns_co = returns_before_the_date[returns_before_the_date['市场状态'] == 'Correction']
             avg_return_co = returns_co['收益率'].mean()
             avg_return_square_co = (returns_co['收益率'] ** 2).mean()
-            a_co = 0.5 * (1 - (1 / C) * (avg_return_co / avg_return_square_co))
+            if (C != 0) and (avg_return_square_co != 0):
+                a_co = 0.5 * (1 - (1 / C) * (avg_return_co / avg_return_square_co))
+            else:  # 没有历史收益可参照时，不设权重
+                a_co = 0.5
             aCo_series[date] = a_co
 
             returns_re = returns_before_the_date[returns_before_the_date['市场状态'] == 'Rebound']
             avg_return_re = returns_re['收益率'].mean()
             avg_return_square_re = (returns_re['收益率'] ** 2).mean()
-            a_re = 0.5 * (1 - (1 / C) * (avg_return_re / avg_return_square_re))
+            if (C != 0) and (avg_return_square_re != 0):
+                a_re = 0.5 * (1 - (1 / C) * (avg_return_re / avg_return_square_re))
+            else:  # 没有历史收益可参照时，不设权重
+                a_re = 0.5
             aRe_series[date] = a_re
+
         aRe_series = aRe_series.clip(0, 1)
         aCo_series = aCo_series.clip(0, 1)
         return aCo_series, aRe_series, C_series

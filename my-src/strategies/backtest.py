@@ -7,13 +7,14 @@ def run_backtest():
     # 获取恒生科技指数数据
     stock_code = "01024"
     adjust_type = "hfq"
-    start_date = '20230101'
+    start_date = '20240101'
     end_date = '20241231'
     frequency = StrategyPlanner.DAILY
     # 创建策略规划器
     strategy_planner = StrategyPlanner(frequency)
     # 准备好回测数据
-    hstech_his_prices, hstech_his_rets = strategy_planner.prepare_backtest_data(adjust_type, start_date, end_date, stock_code)
+    hstech_his_prices, hstech_his_rets = strategy_planner.prepare_backtest_data(adjust_type, start_date, end_date,
+                                                                                stock_code)
     strategy_planner.generate_trading_operations(stock_code)
     # 生成交易操作记录
     trading_operations = strategy_planner.get_trading_operations()
@@ -28,8 +29,6 @@ def run_backtest():
                                                    'Dynamic Trend Strategy Daily Returns', 'Returns')
     strategy_visualizer.calculate_strategy_performance(strategy_rets['daily_return'], hstech_his_rets['收益率'],
                                                        frequency)
-
-
 
 
 if __name__ == "__main__":

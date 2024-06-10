@@ -97,9 +97,8 @@ class StrategyVisualizer:
 
         return annualized_return, annualized_volatility, sharpe_ratio, max_drawdown, annualized_excess_return
 
-
     # Function to draw a segment
-    def _draw_segment(self,ax, start_idx, end_idx, state, hstech_his_price, colors, labels, font_colors):
+    def _draw_segment(self, ax, start_idx, end_idx, state, hstech_his_price, colors, labels, font_colors):
         ax.axvspan(start_idx, end_idx, color=colors[state], alpha=0.3)
         mid_idx = (start_idx + end_idx) // 2
         ax.text(mid_idx, hstech_his_price['high'].max() * 1.05, labels[state],
@@ -162,9 +161,9 @@ class StrategyVisualizer:
 
         # Draw the last segment if the loop finished with an open state
         if current_state is not None and start_idx is not None:
-            self._draw_segment(ax, start_idx, len(hstech_his_price) - 1, current_state, hstech_his_price, colors, labels,
-                         font_colors)
-
+            self._draw_segment(ax, start_idx, len(hstech_his_price) - 1, current_state, hstech_his_price, colors,
+                               labels,
+                               font_colors)
 
         # 标记交易计划
         previous_position = None
