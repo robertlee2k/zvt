@@ -196,7 +196,7 @@ class StrategyPlanner:
             elif state == 'Rebound':
                 dynamic_positions.loc[date] = (1 - aRe.loc[date]) * slow_mom + aRe.loc[
                     date] * fast_mom
-        return dynamic_positions[self.start_date:] #只返回目标日期之后的
+        return dynamic_positions
 
     def generate_trading_operations(self, stock_code):
         # 使用已缓存好的数据
@@ -230,12 +230,12 @@ class StrategyPlanner:
         # 将执行日期往后推一个周期
         shifted_dates = self._shift_date_by_one(current_positions.index)
         for i, execute_date in enumerate(shifted_dates):
-            curr_pos = current_positions['仓位'].iloc[i]  # 当前的头寸
-            trading_operations.append((execute_date, stock_code, curr_pos))
-
             market_date = data.index[i]  # 市场状态就是当天,不用后推一天
-            cur_market = data['市场状态'].iloc[i]  # 当前的市场状态
-            market.append((market_date, stock_code, cur_market))
+            if market_date >= self.start_date:  # 只记录并返回目标日期之后的，前面的空转计算
+                cur_market = data['市场状态'].iloc[i]  # 当前的市场状态
+                market.append((market_date, stock_code, cur_market))
+                curr_pos = current_positions['仓位'].iloc[i]  # 当前的头寸
+                trading_operations.append((execute_date, stock_code, curr_pos))
 
         self.plan = trading_operations
         self.market_states = market

@@ -97,6 +97,14 @@ class StrategyVisualizer:
 
         return annualized_return, annualized_volatility, sharpe_ratio, max_drawdown, annualized_excess_return
 
+
+    # Function to draw a segment
+    def _draw_segment(self,ax, start_idx, end_idx, state, hstech_his_price, colors, labels, font_colors):
+        ax.axvspan(start_idx, end_idx, color=colors[state], alpha=0.3)
+        mid_idx = (start_idx + end_idx) // 2
+        ax.text(mid_idx, hstech_his_price['high'].max() * 1.05, labels[state],
+                color=font_colors[state], fontsize=10, ha='center')
+
     def visualize_plan(self, strategy_planner: StrategyPlanner, hstech_his_price):
         # 绘制K线图和标记
         fig, ax = plt.subplots(figsize=(12, 8))
@@ -132,28 +140,31 @@ class StrategyVisualizer:
         end_idx = None
         current_state = None
 
+        # Iterate over market states
         for i, market_state in enumerate(market_states):
             date, stock, state_str = market_state
-            idx = hstech_his_price.index.get_loc(date)
-            state = StrategyPlanner.MARKET_STAGES.index(state_str)
-            if current_state is None:
-                start_idx = idx
-                current_state = state
-            elif state != current_state:
-                end_idx = idx
-                ax.axvspan(start_idx, end_idx, color=colors[current_state], alpha=0.3)
-                mid_idx = (start_idx + end_idx) // 2
-                ax.text(mid_idx, hstech_his_price['high'].max() * 1.05, labels[current_state],
-                        color=font_colors[current_state], fontsize=10, ha='center')
-                start_idx = idx
-                current_state = state
 
-        # 处理最后一个区间
-        if start_idx is not None and current_state is not None:
-            ax.axvspan(start_idx, hstech_his_price.index.size - 1, color=colors[current_state], alpha=0.3)
-            mid_idx = (start_idx + hstech_his_price.index.size - 1) // 2
-            ax.text(mid_idx, hstech_his_price['high'].max() * 1.05, labels[current_state],
-                    color=font_colors[current_state], fontsize=10, ha='center')
+            # Check if date exists in hstech_his_price
+            if date in hstech_his_price.index:
+                idx = hstech_his_price.index.get_loc(date)
+                state = StrategyPlanner.MARKET_STAGES.index(state_str)
+
+                if current_state is None:
+                    # Initialize the first state
+                    start_idx = idx
+                    current_state = state
+                elif state != current_state:
+                    # State has changed, draw the previous state segment
+                    self._draw_segment(ax, start_idx, idx, current_state, hstech_his_price, colors, labels, font_colors)
+                    # Update to the new state
+                    start_idx = idx
+                    current_state = state
+
+        # Draw the last segment if the loop finished with an open state
+        if current_state is not None and start_idx is not None:
+            self._draw_segment(ax, start_idx, len(hstech_his_price) - 1, current_state, hstech_his_price, colors, labels,
+                         font_colors)
+
 
         # 标记交易计划
         previous_position = None
