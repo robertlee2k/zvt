@@ -86,23 +86,78 @@ class StrategyPlanner:
     def get_trading_operations(self):
         return self.plan
 
-    # 定义动量信号计算
     @staticmethod
     def _cal_momentum(data, window):
         return data.rolling(window=window).mean()
 
     @staticmethod
-    def _market_state(momentum_slow, momentum_fast):
-        market_state = pd.DataFrame(index=momentum_slow.index)
-        conditions = [
-            (momentum_slow >= 0) & (momentum_fast >= 0),
-            (momentum_slow >= 0) & (momentum_fast < 0),
-            (momentum_slow < 0) & (momentum_fast < 0),
-            (momentum_slow < 0) & (momentum_fast >= 0)
-        ]
-        choices = StrategyPlanner.MARKET_STAGES[1:]
-        market_state['市场状态'] = np.select(conditions, choices, default=StrategyPlanner.MARKET_STAGES[0])
+    def _weighted_moving_average(series, window):
+        weights = np.arange(1, window + 1)
+        return series.rolling(window).apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True)
+
+    @staticmethod
+    def _adjusted_momentum(returns, window):
+        wma = StrategyPlanner._weighted_moving_average(returns, window)
+        volatility = returns.rolling(window).std()
+        adjusted_momentum = wma / (1 + volatility)
+        return adjusted_momentum
+
+    @staticmethod
+    def calculate_thresholds(returns, window, mean_factor=0,std_factor=0):
+        rolling_mean = returns.rolling(window).mean()
+        rolling_std = returns.rolling(window).std()
+        upper_threshold = mean_factor*rolling_mean + std_factor * rolling_std
+        lower_threshold = mean_factor*rolling_mean - std_factor * rolling_std
+        return upper_threshold, lower_threshold
+
+    @staticmethod
+    def _market_state(returns, slow_window, fast_window):
+        # 计算慢速和快速动量信号
+        slow_momentum = StrategyPlanner._cal_momentum(returns, slow_window)
+        fast_momentum = StrategyPlanner._cal_momentum(returns, fast_window)
+
+        # 平滑处理和波动率调整
+        slow_adjusted = StrategyPlanner._adjusted_momentum(returns, slow_window)
+        fast_adjusted = StrategyPlanner._adjusted_momentum(returns, fast_window)
+
+        # 动态计算阈值
+        slow_upper, slow_lower = StrategyPlanner.calculate_thresholds(slow_adjusted, slow_window)
+        fast_upper, fast_lower = StrategyPlanner.calculate_thresholds(fast_adjusted, fast_window)
+
+        # 存储调试信息
+        debug_info = pd.DataFrame({
+            'Return': returns,
+            'Slow Momentum': slow_momentum,
+            'Fast Momentum': fast_momentum,
+            'Slow Adjusted Momentum': slow_adjusted,
+            'Fast Adjusted Momentum': fast_adjusted,
+            'Slow Upper Threshold': slow_upper,
+            'Slow Lower Threshold': slow_lower,
+            'Fast Upper Threshold': fast_upper,
+            'Fast Lower Threshold': fast_lower
+        })
+
+        debug_info.to_excel("../output-files/market_state_debug_info.xlsx")
+
+        # 定义市场状态
+        market_state = pd.DataFrame(index=returns.index)
+        market_state['市场状态'] = np.select(
+            [
+                (slow_adjusted > slow_upper) & (fast_adjusted > fast_upper),  # 牛市
+                (slow_adjusted > slow_upper) & (fast_adjusted < fast_lower),  # 修正
+                (slow_adjusted < slow_lower) & (fast_adjusted < fast_lower),  # 熊市
+                (slow_adjusted < slow_lower) & (fast_adjusted > fast_upper)   # 反弹
+            ],
+            StrategyPlanner.MARKET_STAGES[1:],  # ['Bull', 'Correction', 'Bear', 'Rebound']
+            default=StrategyPlanner.MARKET_STAGES[0]
+        )
+
+        # 存储调整后的动量信号
+        market_state['调整后慢速动量'] = slow_adjusted
+        market_state['调整后快速动量'] = fast_adjusted
+
         return market_state
+
 
     @staticmethod
     def _cal_normalization_factor(past_returns):
@@ -178,50 +233,43 @@ class StrategyPlanner:
         return aCo_series, aRe_series, C_series
 
     # 计算动态趋势策略仓位
-    def _cal_dynamic_positions(self, data, aCo, aRe, momentum_slow, momentum_fast):
-        dynamic_positions = pd.DataFrame(index=data.index, columns=['仓位'])
-        for date in data.index:
-            state = data.loc[date]['市场状态']
-            slow_mom = momentum_slow.loc[date]
-            if slow_mom >= 0:
-                slow_mom = 1
-            else:
-                slow_mom = -1
-            fast_mom = momentum_fast.loc[date]
-            if fast_mom >= 0:
-                fast_mom = 1
-            else:
-                fast_mom = -1
-            if state == 'Bull':
-                dynamic_positions.loc[date] = 1
-            elif state == 'Bear':
-                dynamic_positions.loc[date] = -1
-            elif state == 'Correction':
-                dynamic_positions.loc[date] = (1 - aCo.loc[date]) * slow_mom + aCo.loc[
-                    date] * fast_mom
-            elif state == 'Rebound':
-                dynamic_positions.loc[date] = (1 - aRe.loc[date]) * slow_mom + aRe.loc[
-                    date] * fast_mom
+    def _cal_dynamic_positions(self, data, aCo, aRe):
+        # 计算 Correction 和 Rebound 状态下的仓位
+        correction_positions = (1 - aCo) * np.sign(data['调整后慢速动量']) + aCo * np.sign(data['调整后快速动量'])
+        rebound_positions = (1 - aRe) * np.sign(data['调整后慢速动量']) + aRe * np.sign(data['调整后快速动量'])
+
+        # 根据市场状态设置仓位
+        positions = np.where(
+            data['市场状态'] == 'Bull', np.sign(data['调整后慢速动量']),
+            np.where(data['市场状态'] == 'Bear', np.sign(data['调整后慢速动量']),
+                     np.where(data['市场状态'] == 'Correction',
+                              correction_positions,
+                              np.where(data['市场状态'] == 'Rebound',
+                                       rebound_positions,
+                                       0)
+                              )
+                     )
+        )
+
+        dynamic_positions = pd.DataFrame(data=positions, index=data.index, columns=['仓位'])
+
         return dynamic_positions
 
     def generate_trading_operations(self, stock_code):
         # 使用已缓存好的数据
         data = self.history_rets
-        # 计算慢速和快速动量信号
-        momentum_slow = self._cal_momentum(data['收益率'], self.slow_window)
-        momentum_slow = momentum_slow.rename('长期收益率')
-        momentum_fast = self._cal_momentum(data['收益率'], self.fast_window)
-        momentum_fast = momentum_fast.rename('短期收益率')
 
-        # 获取市场状态
-        market_state = self._market_state(momentum_slow, momentum_fast)
+        # momentum_slow = momentum_slow.rename('长期收益率')
+        # momentum_fast = momentum_fast.rename('短期收益率')
+        # 获取市场状态和强度
+        market_state = self._market_state(data['收益率'], self.slow_window, self.fast_window)
+
         # 将市场状态拼接到原始数据中
         data = pd.concat([data, market_state], axis=1)
         self.aCo_Series, self.aRe_Series, C = self._cal_aCo_aRe(data)
-        current_positions = self._cal_dynamic_positions(data, self.aCo_Series, self.aRe_Series, momentum_slow,
-                                                        momentum_fast)
+        current_positions = self._cal_dynamic_positions(data, self.aCo_Series, self.aRe_Series)
 
-        self.write_internal_status(C, current_positions, data, momentum_slow, momentum_fast)
+        self.write_internal_status(C, current_positions, data)
 
         # 明确数据类型以避免 FutureWarning
         current_positions['仓位'] = current_positions['仓位'].infer_objects(copy=False)
@@ -248,11 +296,11 @@ class StrategyPlanner:
         self.save_strategy_plan()
         return trading_operations
 
-    def write_internal_status(self, C, current_positions, data, momentum_slow, momentum_fast):
+    def write_internal_status(self, C, current_positions, data):
         filename = '../output-files/strategy_internal_status.xlsx'
         # 拼接成一个 DataFrame
         combined_df = pd.concat(
-            [current_positions, data, momentum_slow, momentum_fast, self.aCo_Series, self.aRe_Series, C], axis=1)
+            [current_positions, data, self.aCo_Series, self.aRe_Series, C], axis=1)
         combined_df.to_excel(filename)
 
         print(f"数据已成功导出到 {filename}")
