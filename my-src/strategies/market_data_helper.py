@@ -28,6 +28,16 @@ class MarketDataHelper:
         else:
             return '未知类型'
 
+
+    @staticmethod
+    def query_index_data(index_code, start_date, end_date):
+        price_df = ak.stock_zh_index_daily(symbol=index_code)
+        price_df['date'] = pd.to_datetime(price_df['date'])
+        price_df = price_df[(price_df['date'] >= start_date) & (price_df['date'] <= end_date)]
+        price_df = price_df.sort_values('date').set_index('date')
+        price_df = price_df.dropna(subset=['high', 'low', 'close'])  # 删除缺失值
+        return price_df
+
     # 调用akshare接口（东财接口）, exchange_rate_df
     @staticmethod
     def query_akshare(symbol, period, start_date, end_date, adjust=AK_ADJUST_NONE):
