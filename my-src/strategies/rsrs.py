@@ -4,44 +4,43 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import ParameterGrid
 from market_data_helper import MarketDataHelper
 from joblib import Parallel, delayed
+import os
+import matplotlib.pyplot as plt
 
 
 class RSRSStrategy:
-    def __init__(self, index_code, start_date, end_date, n_jobs=-1):
+    def __init__(self, index_code, start_date, end_date, n_jobs=1):
         self.index_code = index_code
         self.start_date = pd.to_datetime(start_date)
         self.end_date = pd.to_datetime(end_date)
         self.price_df = self._get_data()
-        self.optimal_params = {}
+        self.optimal_params_df = None
         self.skipped_months = []
         self.n_jobs = n_jobs
+
 
         self._prepare_warmup_data()
 
     def _get_data(self):
         price_df = MarketDataHelper.query_index_data(self.index_code, self.start_date, self.end_date)
-        print(f"Data loaded with shape: {price_df.shape}")
+        self.start_date = price_df.index.min()
+        self.end_date = price_df.index.max()
+        print(f"Data loaded with shape: {price_df.shape}, from {self.start_date.date()} to {self.end_date.date()}")
         return price_df
 
     def _prepare_warmup_data(self):
-        # 获取所有交易日期
         df_trade_dates = MarketDataHelper.get_trade_dates()
-        # 找到 start_date 最近的交易日索引
         nearest_index = df_trade_dates['trade_date'].searchsorted(self.start_date)
         self.start_date = df_trade_dates.iloc[nearest_index]['trade_date']
 
-        # 计算 warmup_start_date
         warmup_period = 550
         warmup_index = max(0, nearest_index - warmup_period)
         self.warmup_start_date = df_trade_dates.iloc[warmup_index]['trade_date']
 
-        # 获取 warmup 数据
         self.warmup_df = MarketDataHelper.query_index_data(self.index_code, self.warmup_start_date, self.start_date)
 
     def get_warmup_data(self, end_date, num_periods):
-        # 获取所有交易日期
         df_trade_dates = MarketDataHelper.get_trade_dates()
-        # 找到 end_date 最近的交易日索引
         nearest_end_index = df_trade_dates['trade_date'].searchsorted(end_date)
         end_date = df_trade_dates.iloc[nearest_end_index]['trade_date']
 
@@ -54,28 +53,25 @@ class RSRSStrategy:
         best_score = -np.inf
         best_params = None
 
+        month_results = []
+
         for params in ParameterGrid(param_grid):
             window_n = params['window_N']
             window_m = params['window_M']
 
-            # 如果用于计算的monthly_df中warmup数据不够，从warmup_df中获取并拼接
             warmup_period_needed = window_n + window_m + 1
             if len(monthly_df) < warmup_period_needed:
                 warmup_data_needed = warmup_period_needed - len(monthly_df)
                 warmup_df = self.get_warmup_data(monthly_df.index.min(), warmup_data_needed)
                 monthly_df = pd.concat([warmup_df, monthly_df])
 
-            print(f"Processing month: {end_month.strftime('%Y-%m')} with window_n={window_n} and window_m={window_m}")
-            print(
-                f"    with monthly data: {monthly_df.shape} (min date: {monthly_df.index.min().strftime('%Y-%m-%d')}, max date: {monthly_df.index.max().strftime('%Y-%m-%d')}) ")
-
             beta, r_squared = self.calculate_rsrs_parameters(monthly_df, window_n)
+            print(
+                f"finish prams {params} for month: {end_month.date()} from {monthly_df.index.min().date()} to {monthly_df.index.max().date()}")
 
-            # 只保留train_df的部分
             monthly_df['rsrs_beta'] = beta
             monthly_df['r_squared'] = r_squared
 
-            # 计算滚动均值和标准差
             rolling_mean = monthly_df['rsrs_beta'].rolling(window=window_m, min_periods=1).mean()
             rolling_std = monthly_df['rsrs_beta'].rolling(window=window_m, min_periods=1).std()
 
@@ -84,13 +80,24 @@ class RSRSStrategy:
             monthly_df['rsrs_zscore_positive'] = monthly_df['rsrs_zscore_r2'] * monthly_df['rsrs_beta']
             monthly_df['returns'] = monthly_df['close'].pct_change().shift(-1).fillna(0)
 
-            # 评估参数
             evaluation_score = self.evaluate_params(monthly_df, end_month)
+            month_results.append({
+                'end_month': end_month.strftime('%Y-%m-%d'),
+                'window_N': window_n,
+                'window_M': window_m,
+                'score': evaluation_score,
+                'is_optimal': 0
+            })
+
             if evaluation_score > best_score:
                 best_score = evaluation_score
                 best_params = (window_n, window_m)
 
-        return end_month, best_params, best_score
+        for result in month_results:
+            if result['window_N'] == best_params[0] and result['window_M'] == best_params[1]:
+                result['is_optimal'] = 1
+
+        return month_results
 
     def optimize_parameters(self):
         param_grid = {
@@ -103,16 +110,31 @@ class RSRSStrategy:
             for end_month in pd.date_range(self.start_date, self.end_date, freq='MS')
         )
 
-        for end_month, best_params, best_score in results:
-            if best_params:
-                self.optimal_params[end_month] = {'params': best_params, 'score': best_score}
+        all_params_list = []
+        optimal_params_list = []
+        for month_results in results:
+            all_params_list.extend(month_results)
+            for result in month_results:
+                if result['is_optimal']:
+                    optimal_params_list.append(result)
 
-        print("最优参数：")
-        print(self.optimal_params)
-        print("跳过的月份：")
-        print(self.skipped_months)
+        self.all_params_df = pd.DataFrame(all_params_list)
+        self.optimal_params_df = pd.DataFrame(optimal_params_list)
+        self.save_params_to_csv()
 
-    def calculate_rsrs_parameters(self, df, window_n):
+    def save_params_to_csv(self):
+        self.optimal_params_df.to_csv(f'optimal_params_{self.index_code}.csv', index=False)
+        self.all_params_df.to_csv(f'all_params_{self.index_code}.csv', index=False)
+
+    def load_optimal_params_from_csv(self):
+        file_path = f'optimal_params_{self.index_code}.csv'
+        if os.path.exists(file_path):
+            self.optimal_params_df = pd.read_csv(file_path)
+        else:
+            self.optimal_params_df = pd.DataFrame(columns=['end_month', 'window_N', 'window_M', 'score'])
+
+    @staticmethod
+    def calculate_rsrs_parameters(df, window_n):
         beta = np.full(df.shape[0], np.nan)
         r_squared = np.full(df.shape[0], np.nan)
 
@@ -120,8 +142,7 @@ class RSRSStrategy:
             y = df['high'].iloc[i - window_n + 1:i + 1].values
             X = np.c_[np.ones(window_n), df['low'].iloc[i - window_n + 1:i + 1].values]
             if np.isnan(y).any() or np.isnan(X).any():
-                print(f"NaN detected in train data at window: {i}")
-                continue  # 跳过包含NaN值的窗口
+                continue
             model = LinearRegression()
             model.fit(X, y)
             beta[i] = model.coef_[1]
@@ -130,7 +151,7 @@ class RSRSStrategy:
         return beta, r_squared
 
     def evaluate_params(self, df, end_month):
-        eval_start_date = end_month - pd.DateOffset(months=3)  # 看最近3个月的ic表现
+        eval_start_date = end_month - pd.DateOffset(months=3)
         eval_df = df[(df.index >= eval_start_date) & (df.index < end_month)].copy()
 
         if len(eval_df) == 0:
@@ -138,22 +159,27 @@ class RSRSStrategy:
 
         return self.calculate_ic(eval_df['rsrs_zscore_r2'], eval_df['returns'])
 
-    def calculate_ic(self, factor, returns):
+    @staticmethod
+    def calculate_ic(factor, returns):
         return factor.corr(returns)
 
     def calculate_rsrs(self):
-        self.optimize_parameters()
+        self.load_optimal_params_from_csv()
 
-        beta = np.full(self.price_df.shape[0], np.nan)
-        r_squared = np.full(self.price_df.shape[0], np.nan)
+        if self.optimal_params_df.empty:
+            self.optimize_parameters()
 
         for end_month in pd.date_range(self.start_date, self.end_date, freq='MS'):
-            current_month_start = end_month
-            if current_month_start not in self.optimal_params:
+            current_month_start = end_month.strftime('%Y-%m-%d')
+            optimal_params = self.optimal_params_df[self.optimal_params_df['end_month'] == current_month_start]
+
+            if optimal_params.empty:
                 continue
 
-            window_N, window_M = self.optimal_params[current_month_start]['params']
-            monthly_df = self.price_df[(self.price_df.index >= self.start_date) & (self.price_df.index < end_month)].copy()
+            window_N = optimal_params['window_N'].values[0]
+            window_M = optimal_params['window_M'].values[0]
+            monthly_df = self.price_df[
+                (self.price_df.index >= self.start_date) & (self.price_df.index < end_month)].copy()
 
             beta, r_squared = self.calculate_rsrs_parameters(monthly_df, window_N)
 
@@ -162,14 +188,56 @@ class RSRSStrategy:
 
             rolling_mean = self.price_df['rsrs_beta'].rolling(window=window_M, min_periods=1).mean()
             rolling_std = self.price_df['rsrs_beta'].rolling(window=window_M, min_periods=1).std()
-            self.price_df.loc[monthly_df.index, 'rsrs_zscore'] = (self.price_df['rsrs_beta'] - rolling_mean) / rolling_std
-            self.price_df.loc[monthly_df.index, 'rsrs_zscore_r2'] = self.price_df['rsrs_zscore'] * self.price_df['r_squared']
-            self.price_df.loc[monthly_df.index, 'rsrs_zscore_positive'] = self.price_df['rsrs_zscore_r2'] * self.price_df['rsrs_beta']
+            self.price_df.loc[monthly_df.index, 'rsrs_zscore'] = (self.price_df[
+                                                                      'rsrs_beta'] - rolling_mean) / rolling_std
+            self.price_df.loc[monthly_df.index, 'rsrs_zscore_r2'] = self.price_df['rsrs_zscore'] * self.price_df[
+                'r_squared']
+            self.price_df.loc[monthly_df.index, 'rsrs_zscore_positive'] = self.price_df['rsrs_zscore_r2'] * \
+                                                                          self.price_df['rsrs_beta']
             self.price_df.loc[monthly_df.index, 'returns'] = self.price_df['close'].pct_change().shift(-1).fillna(0)
 
         self.price_df.to_csv('rsrs_results.csv')
+
     def get_signals(self):
         return self.price_df[['rsrs_zscore', 'rsrs_zscore_r2', 'rsrs_zscore_positive', 'returns']]
+
+    def analyze_param_distributions(self):
+        all_params_path = f'all_params_{self.index_code}.csv'
+        if not os.path.exists(all_params_path):
+            print("No parameter data to analyze.")
+            return
+
+        all_params_df = pd.read_csv(all_params_path)
+
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        axes[0].hist(all_params_df['window_N'], bins=range(10, 35, 5), edgecolor='black')
+        axes[0].set_title('Distribution of Window N')
+        axes[1].hist(all_params_df['window_M'], bins=range(100, 450, 50), edgecolor='black')
+        axes[1].set_title('Distribution of Window M')
+        axes[2].hist(all_params_df['score'], bins=20, edgecolor='black')
+        axes[2].set_title('Distribution of Scores')
+        plt.tight_layout()
+        plt.show()
+
+        mean_score = all_params_df['score'].mean()
+        std_score = all_params_df['score'].std()
+        best_scores = all_params_df[all_params_df['is_optimal'] == 1]['score']
+        best_mean_score = best_scores.mean()
+
+        print(f"Average Score: {mean_score:.4f}")
+        print(f"Standard Deviation of Scores: {std_score:.4f}")
+        print(f"Average Best Score: {best_mean_score:.4f}")
+
+        # 置信区间
+        ci_low = mean_score - 1.96 * std_score / np.sqrt(len(all_params_df))
+        ci_high = mean_score + 1.96 * std_score / np.sqrt(len(all_params_df))
+        print(f"95% Confidence Interval of the Mean Score: ({ci_low:.4f}, {ci_high:.4f})")
+
+        # 检查最优得分是否在置信区间内
+        if ci_low <= best_mean_score <= ci_high:
+            print("The factor is robust across different parameter combinations.")
+        else:
+            print("The factor is not robust across different parameter combinations.")
 
 
 from factor_evaluator import FactorEvaluator
@@ -188,3 +256,6 @@ for key, value in interpretations.items():
     print(f"{key}:")
     for metric, interpretation in value.items():
         print(f"  {metric}: {interpretation}")
+
+# 分析参数分布
+rsrs_strategy.analyze_param_distributions()
