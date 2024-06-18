@@ -6,6 +6,7 @@ from market_data_helper import MarketDataHelper
 from joblib import Parallel, delayed
 import os
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 class RSRSStrategy:
@@ -130,6 +131,7 @@ class RSRSStrategy:
         file_path = f'optimal_params_{self.index_code}.csv'
         if os.path.exists(file_path):
             self.optimal_params_df = pd.read_csv(file_path)
+            self.optimal_params_df['month_start']=pd.to_datetime(self.optimal_params_df['month_start'])
         else:
             self.optimal_params_df = pd.DataFrame(columns=['month_start', 'window_N', 'window_M', 'score'])
 
@@ -169,8 +171,8 @@ class RSRSStrategy:
         if self.optimal_params_df.empty:
             self.optimize_parameters()
 
-        for month_start in pd.date_range(self.start_date, self.end_date, freq='MS'):
-            current_month_start = month_start.strftime('%Y-%m-%d')
+        for month_start in tqdm(pd.date_range(self.start_date, self.end_date, freq='MS'), desc="Processing months"):
+            current_month_start = pd.to_datetime(month_start)
             optimal_params = self.optimal_params_df[self.optimal_params_df['month_start'] == current_month_start]
 
             if optimal_params.empty:
