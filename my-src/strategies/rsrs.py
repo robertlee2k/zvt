@@ -82,7 +82,7 @@ class RSRSStrategy:
 
             evaluation_score = self.evaluate_params(monthly_df, month_start)
             month_results.append({
-                'end_month': month_start.strftime('%Y-%m-%d'),
+                'month_start': month_start.strftime('%Y-%m-%d'),
                 'window_N': window_n,
                 'window_M': window_m,
                 'score': evaluation_score,
@@ -150,9 +150,9 @@ class RSRSStrategy:
 
         return beta, r_squared
 
-    def evaluate_params(self, df, end_month):
-        eval_start_date = end_month - pd.DateOffset(months=3)
-        eval_df = df[(df.index >= eval_start_date) & (df.index < end_month)].copy()
+    def evaluate_params(self, df, month_start):
+        eval_start_date = month_start - pd.DateOffset(months=3)
+        eval_df = df[(df.index >= eval_start_date) & (df.index < month_start)].copy()
 
         if len(eval_df) == 0:
             return -np.inf
