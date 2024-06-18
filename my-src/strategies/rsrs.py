@@ -18,7 +18,6 @@ class RSRSStrategy:
         self.skipped_months = []
         self.n_jobs = n_jobs
 
-
         self._prepare_warmup_data()
 
     def _get_data(self):
@@ -48,8 +47,9 @@ class RSRSStrategy:
         start_date = df_trade_dates.iloc[start_idx]['trade_date']
         return self.warmup_df[start_date:end_date]
 
-    def optimize_parameters_for_month(self, end_month, param_grid):
-        monthly_df = self.price_df[(self.price_df.index >= self.start_date) & (self.price_df.index <= end_month)].copy()
+    def optimize_parameters_for_month(self, month_start, param_grid):
+        monthly_df = self.price_df[
+            (self.price_df.index >= self.start_date) & (self.price_df.index < month_start)].copy()
         best_score = -np.inf
         best_params = None
 
@@ -67,7 +67,7 @@ class RSRSStrategy:
 
             beta, r_squared = self.calculate_rsrs_parameters(monthly_df, window_n)
             print(
-                f"finish prams {params} for month: {end_month.date()} from {monthly_df.index.min().date()} to {monthly_df.index.max().date()}")
+                f"finish prams {params} for month: {month_start.date()} from {monthly_df.index.min().date()} to {monthly_df.index.max().date()}")
 
             monthly_df['rsrs_beta'] = beta
             monthly_df['r_squared'] = r_squared
@@ -80,9 +80,9 @@ class RSRSStrategy:
             monthly_df['rsrs_zscore_positive'] = monthly_df['rsrs_zscore_r2'] * monthly_df['rsrs_beta']
             monthly_df['returns'] = monthly_df['close'].pct_change().shift(-1).fillna(0)
 
-            evaluation_score = self.evaluate_params(monthly_df, end_month)
+            evaluation_score = self.evaluate_params(monthly_df, month_start)
             month_results.append({
-                'end_month': end_month.strftime('%Y-%m-%d'),
+                'end_month': month_start.strftime('%Y-%m-%d'),
                 'window_N': window_n,
                 'window_M': window_m,
                 'score': evaluation_score,
@@ -106,8 +106,8 @@ class RSRSStrategy:
         }
 
         results = Parallel(n_jobs=self.n_jobs)(
-            delayed(self.optimize_parameters_for_month)(end_month, param_grid)
-            for end_month in pd.date_range(self.start_date, self.end_date, freq='MS')
+            delayed(self.optimize_parameters_for_month)(month_start, param_grid)
+            for month_start in pd.date_range(self.start_date, self.end_date, freq='MS')
         )
 
         all_params_list = []
@@ -131,7 +131,7 @@ class RSRSStrategy:
         if os.path.exists(file_path):
             self.optimal_params_df = pd.read_csv(file_path)
         else:
-            self.optimal_params_df = pd.DataFrame(columns=['end_month', 'window_N', 'window_M', 'score'])
+            self.optimal_params_df = pd.DataFrame(columns=['month_start', 'window_N', 'window_M', 'score'])
 
     @staticmethod
     def calculate_rsrs_parameters(df, window_n):
@@ -169,9 +169,9 @@ class RSRSStrategy:
         if self.optimal_params_df.empty:
             self.optimize_parameters()
 
-        for end_month in pd.date_range(self.start_date, self.end_date, freq='MS'):
-            current_month_start = end_month.strftime('%Y-%m-%d')
-            optimal_params = self.optimal_params_df[self.optimal_params_df['end_month'] == current_month_start]
+        for month_start in pd.date_range(self.start_date, self.end_date, freq='MS'):
+            current_month_start = month_start.strftime('%Y-%m-%d')
+            optimal_params = self.optimal_params_df[self.optimal_params_df['month_start'] == current_month_start]
 
             if optimal_params.empty:
                 continue
@@ -179,7 +179,7 @@ class RSRSStrategy:
             window_N = optimal_params['window_N'].values[0]
             window_M = optimal_params['window_M'].values[0]
             monthly_df = self.price_df[
-                (self.price_df.index >= self.start_date) & (self.price_df.index < end_month)].copy()
+                (self.price_df.index >= self.start_date) & (self.price_df.index < month_start)].copy()
 
             beta, r_squared = self.calculate_rsrs_parameters(monthly_df, window_N)
 
@@ -243,7 +243,7 @@ class RSRSStrategy:
 from factor_evaluator import FactorEvaluator
 
 # 使用示例
-rsrs_strategy = RSRSStrategy(index_code='sh000300', start_date='2020-01-01', end_date='2024-12-31')
+rsrs_strategy = RSRSStrategy(index_code='sh000300', start_date='2014-01-01', end_date='2024-12-31')
 rsrs_strategy.calculate_rsrs()
 signals = rsrs_strategy.get_signals()
 
