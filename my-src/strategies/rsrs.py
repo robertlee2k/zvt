@@ -1,12 +1,14 @@
+import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import ParameterGrid
-from market_data_helper import MarketDataHelper
-from joblib import Parallel, delayed
-import os
-import matplotlib.pyplot as plt
 from tqdm import tqdm
+from factor_evaluator import FactorEvaluator
+from market_data_helper import MarketDataHelper
 
 
 class RSRSStrategy:
@@ -15,8 +17,6 @@ class RSRSStrategy:
         self.start_date = pd.to_datetime(start_date)
         self.end_date = pd.to_datetime(end_date)
         self.price_df = self._get_data()
-        self.optimal_params_df = None
-        self.skipped_months = []
         self.n_jobs = n_jobs
 
         self._prepare_warmup_data()
@@ -68,7 +68,9 @@ class RSRSStrategy:
 
             beta, r_squared = self.calculate_rsrs_parameters(monthly_df, window_n)
             print(
-                f"finish prams {params} for month: {month_start.date()} from {monthly_df.index.min().date()} to {monthly_df.index.max().date()}")
+                f"finish prams {params} for month: {month_start.date()}"
+                f" from {monthly_df.index.min().date()}"
+                f" to {monthly_df.index.max().date()}")
 
             monthly_df['rsrs_beta'] = beta
             monthly_df['r_squared'] = r_squared
@@ -119,21 +121,24 @@ class RSRSStrategy:
                 if result['is_optimal']:
                     optimal_params_list.append(result)
 
-        self.all_params_df = pd.DataFrame(all_params_list)
-        self.optimal_params_df = pd.DataFrame(optimal_params_list)
-        self.save_params_to_csv()
+        all_params_df = pd.DataFrame(all_params_list)
+        optimal_params_df = pd.DataFrame(optimal_params_list)
+        self.save_params_to_csv(all_params_df, optimal_params_df)
+        optimal_params_df['month_start'] = pd.to_datetime(optimal_params_df['month_start'])
+        return optimal_params_df
 
-    def save_params_to_csv(self):
-        self.optimal_params_df.to_csv(f'optimal_params_{self.index_code}.csv', index=False)
-        self.all_params_df.to_csv(f'all_params_{self.index_code}.csv', index=False)
+    def save_params_to_csv(self, all_params_df, optimal_params_df):
+        optimal_params_df.to_csv(f'optimal_params_{self.index_code}.csv', index=False)
+        all_params_df.to_csv(f'all_params_{self.index_code}.csv', index=False)
 
     def load_optimal_params_from_csv(self):
         file_path = f'optimal_params_{self.index_code}.csv'
         if os.path.exists(file_path):
-            self.optimal_params_df = pd.read_csv(file_path)
-            self.optimal_params_df['month_start']=pd.to_datetime(self.optimal_params_df['month_start'])
+            optimal_params_df = pd.read_csv(file_path)
+            optimal_params_df['month_start'] = pd.to_datetime(optimal_params_df['month_start'])
         else:
-            self.optimal_params_df = pd.DataFrame(columns=['month_start', 'window_N', 'window_M', 'score'])
+            optimal_params_df = pd.DataFrame(columns=['month_start', 'window_N', 'window_M', 'score'])
+        return optimal_params_df
 
     @staticmethod
     def calculate_rsrs_parameters(df, window_n):
@@ -166,14 +171,14 @@ class RSRSStrategy:
         return factor.corr(returns)
 
     def calculate_rsrs(self):
-        self.load_optimal_params_from_csv()
+        optimal_params_df = self.load_optimal_params_from_csv()
 
-        if self.optimal_params_df.empty:
-            self.optimize_parameters()
+        if optimal_params_df.empty:
+            optimal_params_df = self.optimize_parameters()
 
         for month_start in tqdm(pd.date_range(self.start_date, self.end_date, freq='MS'), desc="Processing months"):
             current_month_start = pd.to_datetime(month_start)
-            optimal_params = self.optimal_params_df[self.optimal_params_df['month_start'] == current_month_start]
+            optimal_params = optimal_params_df[optimal_params_df['month_start'] == current_month_start]
 
             if optimal_params.empty:
                 continue
@@ -190,12 +195,12 @@ class RSRSStrategy:
 
             rolling_mean = self.price_df['rsrs_beta'].rolling(window=window_M, min_periods=1).mean()
             rolling_std = self.price_df['rsrs_beta'].rolling(window=window_M, min_periods=1).std()
-            self.price_df.loc[monthly_df.index, 'rsrs_zscore'] = (self.price_df[
-                                                                      'rsrs_beta'] - rolling_mean) / rolling_std
-            self.price_df.loc[monthly_df.index, 'rsrs_zscore_r2'] = self.price_df['rsrs_zscore'] * self.price_df[
-                'r_squared']
-            self.price_df.loc[monthly_df.index, 'rsrs_zscore_positive'] = self.price_df['rsrs_zscore_r2'] * \
-                                                                          self.price_df['rsrs_beta']
+            self.price_df.loc[monthly_df.index, 'rsrs_zscore'] = \
+                (self.price_df['rsrs_beta'] - rolling_mean) / rolling_std
+            self.price_df.loc[monthly_df.index, 'rsrs_zscore_r2'] = \
+                self.price_df['rsrs_zscore'] * self.price_df['r_squared']
+            self.price_df.loc[monthly_df.index, 'rsrs_zscore_positive'] = \
+                self.price_df['rsrs_zscore_r2'] * self.price_df['rsrs_beta']
             self.price_df.loc[monthly_df.index, 'returns'] = self.price_df['close'].pct_change().shift(-1).fillna(0)
 
         self.price_df.to_csv('rsrs_results.csv')
@@ -242,10 +247,8 @@ class RSRSStrategy:
             print("The factor is not robust across different parameter combinations.")
 
 
-from factor_evaluator import FactorEvaluator
-
 # 使用示例
-rsrs_strategy = RSRSStrategy(index_code='sh000300', start_date='2014-01-01', end_date='2024-12-31')
+rsrs_strategy = RSRSStrategy(index_code='sh000300', start_date='2020-01-01', end_date='2024-12-31')
 rsrs_strategy.calculate_rsrs()
 signals = rsrs_strategy.get_signals()
 
