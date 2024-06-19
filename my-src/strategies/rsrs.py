@@ -7,6 +7,7 @@ from joblib import Parallel, delayed
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import ParameterGrid
 from tqdm import tqdm
+
 from factor_evaluator import FactorEvaluator
 from market_data_helper import MarketDataHelper
 
@@ -104,8 +105,8 @@ class RSRSStrategy:
 
     def optimize_parameters(self):
         param_grid = {
-            'window_N': range(10, 31, 5),
-            'window_M': range(100, 401, 50)
+            'window_N': range(10, 61, 5),
+            'window_M': range(100, 201, 50)
         }
 
         results = Parallel(n_jobs=self.n_jobs)(
@@ -114,31 +115,26 @@ class RSRSStrategy:
         )
 
         all_params_list = []
-        optimal_params_list = []
         for month_results in results:
             all_params_list.extend(month_results)
-            for result in month_results:
-                if result['is_optimal']:
-                    optimal_params_list.append(result)
 
         all_params_df = pd.DataFrame(all_params_list)
-        optimal_params_df = pd.DataFrame(optimal_params_list)
-        self.save_params_to_csv(all_params_df, optimal_params_df)
-        optimal_params_df['month_start'] = pd.to_datetime(optimal_params_df['month_start'])
-        return optimal_params_df
+        self.save_params_to_csv(all_params_df)
+        all_params_df['month_start'] = pd.to_datetime(all_params_df['month_start'])
+        return all_params_df
 
-    def save_params_to_csv(self, all_params_df, optimal_params_df):
-        optimal_params_df.to_csv(f'optimal_params_{self.index_code}.csv', index=False)
-        all_params_df.to_csv(f'all_params_{self.index_code}.csv', index=False)
+    def save_params_to_csv(self, all_params_df):
+        file_name = f'all_params_{self.index_code}_{self.start_date.date()}-{self.end_date.date()}.csv'
+        all_params_df.to_csv(file_name, index=False)
 
-    def load_optimal_params_from_csv(self):
-        file_path = f'optimal_params_{self.index_code}.csv'
+    def load_params_from_csv(self):
+        file_path = f'all_params_{self.index_code}_{self.start_date.date()}-{self.end_date.date()}.csv'
         if os.path.exists(file_path):
-            optimal_params_df = pd.read_csv(file_path)
-            optimal_params_df['month_start'] = pd.to_datetime(optimal_params_df['month_start'])
+            params_df = pd.read_csv(file_path)
+            params_df['month_start'] = pd.to_datetime(params_df['month_start'])
         else:
-            optimal_params_df = pd.DataFrame(columns=['month_start', 'window_N', 'window_M', 'score'])
-        return optimal_params_df
+            params_df = pd.DataFrame(columns=['month_start', 'window_N', 'window_M', 'score'])
+        return params_df
 
     @staticmethod
     def calculate_rsrs_parameters(df, window_n):
@@ -171,10 +167,11 @@ class RSRSStrategy:
         return factor.corr(returns)
 
     def calculate_rsrs(self):
-        optimal_params_df = self.load_optimal_params_from_csv()
+        params_df = self.load_params_from_csv()
 
-        if optimal_params_df.empty:
-            optimal_params_df = self.optimize_parameters()
+        if params_df.empty:
+            params_df = self.optimize_parameters()
+        optimal_params_df = params_df[params_df['is_optimal'] == 1]
 
         for month_start in tqdm(pd.date_range(self.start_date, self.end_date, freq='MS'), desc="Processing months"):
             current_month_start = pd.to_datetime(month_start)
@@ -209,12 +206,7 @@ class RSRSStrategy:
         return self.price_df[['rsrs_zscore', 'rsrs_zscore_r2', 'rsrs_zscore_positive', 'returns']]
 
     def analyze_param_distributions(self):
-        all_params_path = f'all_params_{self.index_code}.csv'
-        if not os.path.exists(all_params_path):
-            print("No parameter data to analyze.")
-            return
-
-        all_params_df = pd.read_csv(all_params_path)
+        all_params_df = self.load_params_from_csv()
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
         axes[0].hist(all_params_df['window_N'], bins=range(10, 35, 5), edgecolor='black')
