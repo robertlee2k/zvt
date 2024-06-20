@@ -210,7 +210,7 @@ class RSRSStrategy:
 
             # 如有需要补上warmup数据
             monthly_df = self.add_warmup_data_if_needed(self.start_date, monthly_df, window_m, window_n)
-
+            # 回归计算斜率beta和R方
             beta, r_squared = self.calculate_rsrs_parameters(monthly_df, window_n)
 
             monthly_df['rsrs_beta'] = beta
