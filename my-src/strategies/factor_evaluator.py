@@ -65,7 +65,8 @@ class FactorEvaluator:
 
         return results
 
-    def interpret_metrics(self, evaluation):
+    @staticmethod
+    def interpret_metrics(evaluation):
         interpretations = {}
 
         for factor, metrics in evaluation.items():
@@ -110,8 +111,9 @@ class FactorEvaluator:
 
         return interpretations
 
-    def calculate_statistics(self, df):
-        '''
+    @staticmethod
+    def calculate_statistics(df):
+        """
         输入：
         DataFrame类型，包含价格数据和仓位、开平仓标志
             position列：仓位标志位，0表示空仓，1表示持有标的
@@ -119,13 +121,13 @@ class FactorEvaluator:
             close列：日收盘价
 
         输出：dict类型，包含夏普比率、最大回撤等策略结果的统计数据
-        '''
+        """
         # 净值序列
         df['net_asset_pct_chg'] = df.net_asset_value.pct_change(1).fillna(0)
 
         # 总收益率与年化收益率
         total_return = (df['net_asset_value'][df.shape[0] - 1] - 1)
-        annual_return = (total_return) ** (1 / (df.shape[0] / 252)) - 1
+        annual_return = total_return ** (1 / (df.shape[0] / 252)) - 1
         total_return = total_return * 100
         annual_return = annual_return * 100
         # 夏普比率
