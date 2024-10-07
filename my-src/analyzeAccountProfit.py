@@ -32,15 +32,20 @@ def cal_market_value(stock_holding_records, stock_price_df):
 
 # 计算账户市值
 def cal_account_profit(df_market_value, account_balance_records):
-    # 使用groupby和sum函数按日期分组求和当日市值
+    # 使用groupby和sum函数按日期分组求和当日账户资产净值市值
     df_sum = df_market_value.groupby(['交收日期', '账户类型'])['当日市值'].sum().reset_index()
 
-    # 当日市值丢弃，用df_sum里的重新计算
-    account_balance_records.drop('当日市值', axis=1, inplace=True)
+    df_account_profit = pd.merge(account_balance_records, df_sum, how='left', on=['交收日期', '账户类型'],
+                                 suffixes=('', '_sum'))
 
-    df_account_profit = pd.merge(account_balance_records, df_sum, how='left', on=['交收日期', '账户类型'])
+    # 使用 df_sum 中的 '当日市值' 替换 account_balance_records 中的 '当日市值'
+    df_account_profit['当日市值'] = df_account_profit['当日市值_sum']
+    # 删除多余的列
+    df_account_profit.drop(columns=['当日市值_sum'], inplace=True)
+
     df_account_profit['当日市值'] = df_account_profit['当日市值'].fillna(0.0)
-    df_account_profit['盈亏'] = df_account_profit['资金余额'] + df_account_profit['当日市值'] - df_account_profit['累计净转入资金']
+    df_account_profit['资产净值'] = (df_account_profit['资金余额'] + df_account_profit['当日市值'] - (df_account_profit['融资借款']+ df_account_profit['冻结资金']))
+    df_account_profit['盈亏'] = df_account_profit['资产净值'] - df_account_profit['累计净转入资金']
     print(df_account_profit)
     df_total_profit = calcu_total_profit(df_account_profit)
     return df_total_profit, df_account_profit
