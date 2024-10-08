@@ -5,3 +5,14 @@
 # print(infos)
 
 
+import akshare as ak
+stock_code='sh900932'
+start_date='20160301'
+end_date='20190305'
+
+stock_hist_df = ak.stock_zh_b_daily(symbol=stock_code, start_date=start_date,
+                                   end_date=end_date)
+
+print(stock_hist_df)
+
+
