@@ -20,7 +20,13 @@ def cal_market_value(stock_holding_records, stock_price_df):
     merged_df = pd.merge(stock_holding_records, stock_price_df[['证券代码', '日期', '收盘']], how='left',
                          left_on=['证券代码', '交收日期'], right_on=['证券代码', '日期'])
 
-    print(merged_df)
+    # 筛选出“收盘”数据缺失的行,并保存到csv文件
+    missing_close_prices = merged_df[merged_df['收盘'].isnull()]
+    # 选择需要的列并重命名
+    selected_columns = missing_close_prices[['交收日期', '证券代码', '证券名称']]
+    # 保存到CSV文件
+    selected_columns.to_csv('.\\stock\\missing_price.csv', index=False)
+
     # Update '当日市值' based on fetched close prices
     merged_df['当日市值'] = merged_df.apply(lambda row: row['持股成本'] if pd.isnull(row['收盘']) else row['收盘'] * row['持股数量'],
                                         axis=1)
@@ -46,7 +52,13 @@ def cal_account_profit(df_market_value, account_balance_records):
     df_account_profit['当日市值'] = df_account_profit['当日市值'].fillna(0.0)
     df_account_profit['资产净值'] = (df_account_profit['资金余额'] + df_account_profit['当日市值'] - (df_account_profit['融资借款']+ df_account_profit['冻结资金']))
     df_account_profit['盈亏'] = df_account_profit['资产净值'] - df_account_profit['累计净转入资金']
-    print(df_account_profit)
+
+    # 筛选数值型列，遍历数值型列并处理，去除特别小的科学记数法数据
+    numeric_columns = df_account_profit.select_dtypes(include=['number']).columns
+    for column in numeric_columns:
+        df_account_profit.loc[abs(df_account_profit[column]) < 0.001, column] = 0
+
+    # 计算账户的累计盈亏
     df_total_profit = calcu_total_profit(df_account_profit)
     return df_total_profit, df_account_profit
 

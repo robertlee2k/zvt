@@ -204,8 +204,8 @@ def analyze_transactions(start_date=None):
             today_balance.loc[index_in_day, '校验差异'] = available_balance - closest_balance
 
         # 将差异和融资余额等计算项 小于0.01的值设置为0
-        today_balance.loc[abs(today_balance['校验差异']) < 0.01, '校验差异'] = 0
-        today_balance.loc[abs(today_balance['融资借款']) < 0.01, '融资借款'] = 0
+        today_balance.loc[abs(today_balance['校验差异']) < 0.001, '校验差异'] = 0
+        today_balance.loc[abs(today_balance['融资借款']) < 0.001, '融资借款'] = 0
 
         # 新的一天，将之前一天的记录更新追加到history里
         # 将上一交易日的记录加入历史记录df中
