@@ -204,7 +204,8 @@ class StockPriceHistory:
                 stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                    end_date=end_date, adjust=adjust_type)
             elif market == 'B股股票':
-                stock_hist_df = pd.DataFrame()  # ignore B股 (新浪接口有问题）
+                stock_hist_df = ak.stock_zh_b_daily(symbol=stock_code, start_date=start_date,
+                                                    end_date=end_date, adjust=adjust_type)
             elif market == '港股股票':
                 stock_hist_df = ak.stock_hk_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                  end_date=end_date, adjust=adjust_type)
