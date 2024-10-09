@@ -47,12 +47,28 @@ class FundDataHandler:
             print(f"Error processing fund {fund_code}: {e}")
             return pd.DataFrame()
 
+
+    @staticmethod
+    def format_date(date_str, input_format='%Y%m%d', output_format='%Y-%m-%d'):
+        """
+        将日期字符串从 input_format 转换为 output_format 格式。 因为东财的分级基金需要后者
+
+        :param date_str: 原始日期字符串
+        :param input_format: 输入日期字符串的格式，默认为 '%Y%m%d'
+        :param output_format: 输出日期字符串的格式，默认为 '%Y-%m-%d'
+        :return: 转换后的日期字符串
+        """
+        date_obj = datetime.strptime(date_str, input_format)
+        formatted_date = date_obj.strftime(output_format)
+        return formatted_date
+
     @staticmethod
     def grade_fund_hist(stock_code, start_date, end_date):
         start_date = FundDataHandler.format_date(start_date)
         end_date = FundDataHandler.format_date(end_date)
         # 从pickle文件加载已缓存的数据
         cached_df = pd.read_pickle('stock/grade_fund.pkl')
+        #TODO： 考虑使用缓存，避免重复查询。另外，这里的收盘价需要变成浮点数，否则无法计算
 
         # 过滤指定基金代码和日期范围的数据
         filtered_df = cached_df[(cached_df['基金代码'] == stock_code) &
@@ -69,26 +85,10 @@ class FundDataHandler:
 
     @staticmethod
     def etf_fund_hist(stock_code: str,  start_date: str,    end_date: str):
-        start_date = FundDataHandler.format_date(start_date)
-        end_date = FundDataHandler.format_date(end_date)
         stock_hist_df = ak.fund_etf_fund_info_em(fund=stock_code, start_date=start_date, end_date=end_date)
         stock_hist_df.rename(columns={'净值日期': '日期', '单位净值': '收盘'}, inplace=True)
         stock_hist_df = stock_hist_df[['日期', '收盘']]
         return stock_hist_df
-
-    @staticmethod
-    def format_date(date_str, input_format='%Y%m%d', output_format='%Y-%m-%d'):
-        """
-        将日期字符串从 input_format 转换为 output_format 格式。 因为新浪需要前者，东财需要后者
-
-        :param date_str: 原始日期字符串
-        :param input_format: 输入日期字符串的格式，默认为 '%Y%m%d'
-        :param output_format: 输出日期字符串的格式，默认为 '%Y-%m-%d'
-        :return: 转换后的日期字符串
-        """
-        date_obj = datetime.strptime(date_str, input_format)
-        formatted_date = date_obj.strftime(output_format)
-        return formatted_date
 
 # 使用示例
 if __name__ == "__main__":
@@ -96,8 +96,8 @@ if __name__ == "__main__":
     # handler.refresh_local_storage()
 
     # 查询示例
-    stockcode = '150019'
-    startdate = '20150801'
-    enddate = '20161109'
-    query_result = FundDataHandler.grade_fund_hist(stockcode, startdate, enddate)
+    stockcode = '510050'
+    startdate = '20150508'
+    enddate = '20150806'
+    query_result = FundDataHandler.etf_fund_hist(stockcode, startdate, enddate)
     print(query_result)

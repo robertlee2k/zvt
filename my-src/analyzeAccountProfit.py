@@ -30,6 +30,8 @@ def cal_market_value(stock_holding_records, stock_price_df):
     # Update '当日市值' based on fetched close prices
     merged_df['当日市值'] = merged_df.apply(lambda row: row['持股成本'] if pd.isnull(row['收盘']) else row['收盘'] * row['持股数量'],
                                         axis=1)
+
+
     merged_df['浮动盈亏'] = merged_df['当日市值'] - merged_df['持股成本']
 
     merged_df = merged_df[['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '持股成本', '当日市值', '浮动盈亏']]
@@ -76,6 +78,7 @@ def analyze_and_update(start_date=None):
     stock_holding_records, account_balance_records = account_summary.load_account_summaries(start_date)
     # 加载股票价格
     stock_price_df = StockPriceHistory().get_stock_price_df(start_date)
+    stock_price_df['收盘'] = stock_price_df['收盘'].astype(float)
     # 获取股票的market_value
     df_market_value = cal_market_value(stock_holding_records, stock_price_df)
 

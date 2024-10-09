@@ -205,9 +205,9 @@ class StockPriceHistory:
                 stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                    end_date=end_date, adjust=adjust_type)
             elif market == '分级基金':
-                FundDataHandler.grade_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
+                stock_hist_df = FundDataHandler.grade_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
             elif market == 'ETF基金':
-                FundDataHandler.etf_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
+                stock_hist_df = FundDataHandler.etf_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
             elif market == 'B股股票':
                 stock_hist_df = ak.stock_zh_b_daily(symbol='sh' + stock_code, start_date=start_date,
                                                     end_date=end_date, adjust=adjust_type)
