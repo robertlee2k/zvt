@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import timedelta
 from gxTransData import AccountSummary
 import gxTransParser
+from fund_data_handler import FundDataHandler
 
 ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl'  # 所有股票价格
 HGT_EXCHANGE_RATE_FILE = 'stock/hgt_exchange_rate.pkl'  # 沪港通结算汇率
@@ -203,18 +204,23 @@ class StockPriceHistory:
             if market == '上海A股' or market == '深圳A股':
                 stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                    end_date=end_date, adjust=adjust_type)
+            elif market == '分级基金':
+                FundDataHandler.grade_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
+            elif market == 'ETF基金':
+                FundDataHandler.etf_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
             elif market == 'B股股票':
-                stock_hist_df = ak.stock_zh_b_daily(symbol=stock_code, start_date=start_date,
+                stock_hist_df = ak.stock_zh_b_daily(symbol='sh' + stock_code, start_date=start_date,
                                                     end_date=end_date, adjust=adjust_type)
+                stock_hist_df.rename(columns={'date': '日期', 'close': '收盘'}, inplace=True)
+                stock_hist_df = stock_hist_df[['日期', '收盘']]
             elif market == '港股股票':
                 stock_hist_df = ak.stock_hk_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                  end_date=end_date, adjust=adjust_type)
                 stock_hist_df['日期'] = pd.to_datetime(stock_hist_df['日期'])
                 stock_hist_df = pd.merge(stock_hist_df, exchange_rate_df, how='left', on=['日期'])
                 stock_hist_df['收盘'] = stock_hist_df['收盘'] * stock_hist_df['卖出结算汇兑比率']
-                stock_hist_df = stock_hist_df[
-                    ['日期', '收盘']]  # .drop(['买入结算汇兑比率','卖出结算汇兑比率','货币种类'], axis=1, inplace=True)
-
+                stock_hist_df = stock_hist_df[['日期', '收盘']]
+                # .drop(['买入结算汇兑比率','卖出结算汇兑比率','货币种类'], axis=1, inplace=True)
             elif market == 'A股新股':
                 stock_hist_df = pd.DataFrame()  # ignore 新股
             else:  # Default to A股股票
@@ -239,6 +245,17 @@ class StockPriceHistory:
 
     @staticmethod
     def judge_stock_market(code):
+        if not isinstance(code, str) or len(code) < 1:
+            raise ValueError("Invalid input: code must be a non-empty string")
+
+        if FundDataHandler.is_etf_fund(code):
+            return 'ETF基金'
+        if FundDataHandler.is_grade_fund(code):
+            return '分级基金'
+
+        if len(code) < 5:
+            return '未知类型'
+
         if len(code) == 5:
             return '港股股票'
         elif code.startswith('6'):
@@ -247,12 +264,11 @@ class StockPriceHistory:
             return '深圳A股'
         elif code.startswith('900'):
             return 'B股股票'
-        elif code.startswith('5'):
-            return 'A股基金'
         elif code.startswith('7'):
             return 'A股新股'
         else:
             return '未知类型'
+
 
     # 调用akshare接口（新浪接口）获取目标股票的后复权因子
     @staticmethod
@@ -267,7 +283,7 @@ class StockPriceHistory:
                 if market == '深圳A股':
                     df_hfq_factors = ak.stock_zh_a_daily(symbol='sz' + stock_code, adjust=AK_ADJUST_HFQ)
                 elif market == 'B股股票':
-                    df_hfq_factors = pd.DataFrame()  # ignore B股 (新浪接口有问题）
+                    df_hfq_factors = ak.stock_zh_b_daily(symbol='sh' + stock_code, adjust=AK_ADJUST_HFQ)
                 elif market == '港股股票':
                     df_hfq_factors = ak.stock_hk_daily(symbol=stock_code, adjust=AK_ADJUST_HFQ)
                 elif market == 'A股新股':
