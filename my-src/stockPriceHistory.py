@@ -198,6 +198,7 @@ class StockPriceHistory:
     # 调用akshare接口（东财接口）
     def query_akshare(self, stock_code, from_date, to_date, exchange_rate_df, adjust_type=AK_ADJUST_NONE):
         stock_hist_df = None
+        ignore=False
         market = self.judge_stock_market(stock_code)
         # 转换为akshare所需的字符串形式
         start_date = from_date.strftime('%Y%m%d')
@@ -226,12 +227,16 @@ class StockPriceHistory:
                 stock_hist_df = stock_hist_df[['日期', '收盘']]
                 # .drop(['买入结算汇兑比率','卖出结算汇兑比率','货币种类'], axis=1, inplace=True)
             elif market == 'A股新股':
-                stock_hist_df = pd.DataFrame()  # ignore 新股
-            else:  # Default to A股股票
-                stock_hist_df = pd.DataFrame()  # ignore
+                ignore = True  # ignore 新股
         except Exception as e:
             print(f"Failed to fetch data for stock code: {stock_code}. Error: {e}")
-        stock_hist_df['证券代码'] = stock_code
+        if ignore == True :
+            stock_hist_df = pd.DataFrame()  # ignore
+        elif stock_hist_df is not None:
+                if len(stock_hist_df) < 1:
+                    print(f"Empty data returned for stock code: {stock_code}")
+                else:
+                    stock_hist_df['证券代码'] = stock_code
         return stock_hist_df
 
     # 将日期区间按照bin_size(缺省100天)间隔切分为左闭右闭的子区间，这样每次批量获取的收盘价数据不至于冗余太多
