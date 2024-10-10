@@ -1,11 +1,13 @@
 import datetime
 import os
+from datetime import timedelta
+
 import akshare as ak
 import pandas as pd
-from datetime import timedelta
-from gxTransData import AccountSummary
+
 import gxTransParser
 from fund_data_handler import FundDataHandler
+from gxTransData import AccountSummary
 
 ALL_STOCK_HIST_DF_PKL = 'stock/all_stock_hist_df.pkl'  # 所有股票价格
 HGT_EXCHANGE_RATE_FILE = 'stock/hgt_exchange_rate.pkl'  # 沪港通结算汇率
@@ -205,9 +207,11 @@ class StockPriceHistory:
                 stock_hist_df = ak.stock_zh_a_hist(symbol=stock_code, period="daily", start_date=start_date,
                                                    end_date=end_date, adjust=adjust_type)
             elif market == '分级基金':
-                stock_hist_df = FundDataHandler.grade_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
+                stock_hist_df = FundDataHandler.grade_fund_hist(stock_code=stock_code, start_date=start_date,
+                                                                end_date=end_date)
             elif market == 'ETF基金':
-                stock_hist_df = FundDataHandler.etf_fund_hist(stock_code=stock_code, start_date=start_date,end_date=end_date)
+                stock_hist_df = FundDataHandler.etf_fund_hist(stock_code=stock_code, start_date=start_date,
+                                                              end_date=end_date)
             elif market == 'B股股票':
                 stock_hist_df = ak.stock_zh_b_daily(symbol='sh' + stock_code, start_date=start_date,
                                                     end_date=end_date, adjust=adjust_type)
@@ -268,7 +272,6 @@ class StockPriceHistory:
             return 'A股新股'
         else:
             return '未知类型'
-
 
     # 调用akshare接口（新浪接口）获取目标股票的后复权因子
     @staticmethod

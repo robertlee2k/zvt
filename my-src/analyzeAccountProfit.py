@@ -3,6 +3,7 @@ import datetime
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
+# 计算股票当日市值
 import pandas as pd
 import seaborn as sns
 from matplotlib.ticker import FuncFormatter
@@ -11,31 +12,64 @@ from gxTransData import AccountSummary
 from stockPriceHistory import StockPriceHistory
 
 
-# 计算股票当日市值
 def cal_market_value(stock_holding_records, stock_price_df):
+    # 转换交收日期为日期格式，并初始化当日市值为0
     stock_holding_records['交收日期'] = pd.to_datetime(stock_holding_records['交收日期'])
     stock_holding_records['当日市值'] = 0.0
 
-    # Perform inner join on '证券代码' and '交收日期'
+    # 合并持仓记录与股票价格数据
     merged_df = pd.merge(stock_holding_records, stock_price_df[['证券代码', '日期', '收盘']], how='left',
                          left_on=['证券代码', '交收日期'], right_on=['证券代码', '日期'])
 
-    # 筛选出“收盘”数据缺失的行,并保存到csv文件
+    # 对正常有收盘价的，更新当日市值
+    merged_df['当日市值'] = merged_df.apply(
+        lambda row: row['当日市值'] if pd.isnull(row['收盘']) else row['收盘'] * row['持股数量'],
+        axis=1
+    )
+
+    # 初始化备注列
+    merged_df['备注'] = ''
+
+    # 筛选出收盘价缺失的行
     missing_close_prices = merged_df[merged_df['收盘'].isnull()]
-    # 选择需要的列并重命名
-    selected_columns = missing_close_prices[['交收日期', '证券代码', '证券名称']]
-    # 保存到CSV文件
-    selected_columns.to_csv('.\\stock\\missing_price.csv', index=False)
 
-    # Update '当日市值' based on fetched close prices
-    merged_df['当日市值'] = merged_df.apply(lambda row: row['持股成本'] if pd.isnull(row['收盘']) else row['收盘'] * row['持股数量'],
-                                        axis=1)
+    # 留存有收盘价的记录，用于更新当日市值
+    temp_history_df = stock_price_df[stock_price_df['收盘'].notnull()]
 
+    # 遍历收盘价缺失的记录，尝试查找上一个交易日的市值
+    for index, row in missing_close_prices.iterrows():
+        security_code = row['证券代码']
+        settlement_date = row['交收日期']
 
+        # 查找上一个交易日的股价
+        previous_price = find_previous_market_value(temp_history_df, security_code, settlement_date)
+        if pd.notnull(previous_price):
+            merged_df.at[index, '当日市值'] = previous_price * row['持股数量']
+            merged_df.at[index, '备注'] = '停牌'
+        else:
+            # 添加持股成本小于0时按0赋值的逻辑
+            holding_cost = max(0, row['持股成本'])
+            merged_df.at[index, '当日市值'] = holding_cost
+            merged_df.at[index, '备注'] = '估算'
+
+    # 计算浮动盈亏
     merged_df['浮动盈亏'] = merged_df['当日市值'] - merged_df['持股成本']
 
-    merged_df = merged_df[['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '持股成本', '当日市值', '浮动盈亏']]
+    # 选择需要的列
+    merged_df = merged_df[
+        ['交收日期', '账户类型', '证券代码', '证券名称', '持股数量', '持股成本', '当日市值', '浮动盈亏', '备注']]
+
     return merged_df
+
+
+def find_previous_market_value(stock_price_df, security_code, settlement_date):
+    # 查找上一个交易日的市值
+    previous_dates = stock_price_df[
+        (stock_price_df['证券代码'] == security_code) & (stock_price_df['日期'] < settlement_date)]
+    if not previous_dates.empty:
+        latest_date = previous_dates['日期'].max()
+        return previous_dates.loc[previous_dates['日期'] == latest_date, '收盘'].values[0]
+    return None
 
 
 # 计算账户市值
@@ -52,7 +86,8 @@ def cal_account_profit(df_market_value, account_balance_records):
     df_account_profit.drop(columns=['当日市值_sum'], inplace=True)
 
     df_account_profit['当日市值'] = df_account_profit['当日市值'].fillna(0.0)
-    df_account_profit['资产净值'] = (df_account_profit['资金余额'] + df_account_profit['当日市值'] - (df_account_profit['融资借款']+ df_account_profit['冻结资金']))
+    df_account_profit['资产净值'] = (df_account_profit['资金余额'] + df_account_profit['当日市值'] - (
+                df_account_profit['融资借款'] + df_account_profit['冻结资金']))
     df_account_profit['盈亏'] = df_account_profit['资产净值'] - df_account_profit['累计净转入资金']
 
     # 筛选数值型列，遍历数值型列并处理，去除特别小的科学记数法数据
@@ -110,7 +145,7 @@ def annotate_profit(x, y, text, ax):
     ax.annotate(text, (x, y), textcoords="offset points", xytext=(0, 10), ha='center')
 
 
-def format_date(x, pos, df_profit):
+def format_date(x, df_profit):
     index = find_nearest_date_in_figure(df_profit, x)
     if 0 < index < len(df_profit['交收日期']):
         return df_profit['交收日期'].iloc[index].strftime('%Y-%m-%d')
@@ -130,7 +165,8 @@ def on_click_show_profit(event, df_profit, fig, ax):
     index = find_nearest_date_in_figure(df_profit, event.xdata)
     if 0 < index < len(df_profit):
         profit = df_profit['盈亏'].iloc[index] / 10000
-        annotate_profit(event.xdata, event.ydata, f"{df_profit['交收日期'].iloc[index].strftime('%Y/%m/%d')}: {profit:.2f}",
+        annotate_profit(event.xdata, event.ydata,
+                        f"{df_profit['交收日期'].iloc[index].strftime('%Y/%m/%d')}: {profit:.2f}",
                         ax)
         fig.canvas.draw_idle()
 
@@ -152,7 +188,8 @@ def visualize_profit(df_total_profit):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
     # 绘制按日累计盈利曲线
-    ax1 = sns.lineplot(x=df_total_profit['交收日期'], y=df_total_profit['盈亏'] / 10000, color='r', label='累计盈利', ax=ax1)
+    ax1 = sns.lineplot(x=df_total_profit['交收日期'], y=df_total_profit['盈亏'] / 10000, color='r', label='累计盈利',
+                       ax=ax1)
     ax1.set_title('累计盈利曲线图', fontsize=16)
     ax1.set_ylabel('盈利(万元)', fontsize=14)
     ax1.tick_params(axis='x', rotation=45, labelsize=12)
@@ -171,8 +208,8 @@ def visualize_profit(df_total_profit):
     ax2.grid(True)
 
     # 设置 x 轴刻度格式化器
-    ax1.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: format_date(x, pos, df_total_profit)))
-    ax2.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: format_date(x, pos, df_total_profit)))
+    ax1.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: format_date(x, df_total_profit)))
+    ax2.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: format_date(x, df_total_profit)))
 
     # 添加点击事件,显示具体数值
     fig.canvas.mpl_connect('button_press_event', lambda event: on_click_show_profit(event, df_total_profit, fig, ax1))
@@ -219,6 +256,7 @@ def get_sim_account_history(checkpoint_date):
         today_balance = today_balance.copy()
 
     return account_summary.stockhold_history, account_summary.balance_history
+
 
 # import plotly.graph_objects as go
 #
