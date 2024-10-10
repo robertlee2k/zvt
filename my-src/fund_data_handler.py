@@ -1,6 +1,8 @@
-import pandas as pd
-import akshare as ak
 from datetime import datetime
+
+import akshare as ak
+import pandas as pd
+
 
 class FundDataHandler:
     # 定义 ETF 基金代码列表为类的常量
@@ -30,6 +32,9 @@ class FundDataHandler:
 
         # 按照日期列升序排序
         self.result_df = self.result_df.sort_values(by='净值日期', ascending=True)
+        # 确保收盘价列转换为浮点数
+        self.result_df['单位净值'] = self.result_df['单位净值'].astype(float)
+
         self.result_df.to_pickle('stock/grade_fund.pkl')
 
     @staticmethod
@@ -46,7 +51,6 @@ class FundDataHandler:
         except Exception as e:
             print(f"Error processing fund {fund_code}: {e}")
             return pd.DataFrame()
-
 
     @staticmethod
     def format_date(date_str, input_format='%Y%m%d', output_format='%Y-%m-%d'):
@@ -68,7 +72,6 @@ class FundDataHandler:
         end_date = FundDataHandler.format_date(end_date)
         # 从pickle文件加载已缓存的数据
         cached_df = pd.read_pickle('stock/grade_fund.pkl')
-        #TODO： 考虑使用缓存，避免重复查询。另外，这里的收盘价需要变成浮点数，否则无法计算
 
         # 过滤指定基金代码和日期范围的数据
         filtered_df = cached_df[(cached_df['基金代码'] == stock_code) &
@@ -84,11 +87,12 @@ class FundDataHandler:
         return cached_df[['日期', '收盘']]
 
     @staticmethod
-    def etf_fund_hist(stock_code: str,  start_date: str,    end_date: str):
+    def etf_fund_hist(stock_code: str, start_date: str, end_date: str):
         stock_hist_df = ak.fund_etf_fund_info_em(fund=stock_code, start_date=start_date, end_date=end_date)
         stock_hist_df.rename(columns={'净值日期': '日期', '单位净值': '收盘'}, inplace=True)
         stock_hist_df = stock_hist_df[['日期', '收盘']]
         return stock_hist_df
+
 
 # 使用示例
 if __name__ == "__main__":
@@ -96,8 +100,8 @@ if __name__ == "__main__":
     # handler.refresh_local_storage()
 
     # 查询示例
-    stockcode = '510050'
+    stockcode = '150172'
     startdate = '20150508'
     enddate = '20150806'
-    query_result = FundDataHandler.etf_fund_hist(stockcode, startdate, enddate)
+    query_result = FundDataHandler.grade_fund_hist(stockcode, startdate, enddate)
     print(query_result)
