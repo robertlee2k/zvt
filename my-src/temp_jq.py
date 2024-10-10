@@ -6,9 +6,9 @@
 
 
 import akshare as ak
-stock_code='sh900947'
-start_date='20060301'
-end_date='20070305'
+stock_code='sh900932'
+start_date='20160121'
+end_date='20161231'
 stock_hist_df = ak.stock_zh_b_daily(symbol=stock_code, start_date=start_date,
                                    end_date=end_date,adjust="")
 
