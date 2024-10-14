@@ -28,30 +28,7 @@ class FundManager:
         if last_fund_nav == 0:
             raise ValueError(f"{date} 无法处理交易，上一交易日基金净值为0")
 
-        if user_id == "全体":
-            # 获取基金的份额总数
-            if last_fund_units == 0:
-                raise ValueError(f"{date} 无法处理全体交易，前一日总份额为0")
-
-            # 计算每个用户按份额比例应分摊的份额变化
-            for uid, units in self.user_units.items():
-                user_share_percentage = units / last_fund_units
-                user_amount = amount * user_share_percentage  # 该用户应分摊的金额
-                units_change = int(user_amount / last_fund_nav)  # 计算该用户份额变化，取整
-
-                if units_change < 0 and self.user_units[uid] + units_change < 0:
-                    shortfall = abs(self.user_units[uid] + units_change)
-                    print(f"{date} 用户 {uid} 的份额 {self.user_units[uid]} 不足，差 {shortfall} 份")
-                self.user_units[uid] += units_change  # 更新用户份额
-                if self.user_units[uid] == 0:
-                    del self.user_units[uid]
-
-            # 更新基金总份额
-            total_units_change = int(amount / last_fund_nav)
-            self.fund_units += total_units_change  # 更新基金总份额
-
-        else:
-            # 非全体用户的处理逻辑，保持原样
+        if user_id != "临时调拨":   # 忽略内部临时调拨
             units_change = int(amount / last_fund_nav)  # 计算份额变化，取整
 
             if user_id not in self.user_units:
@@ -79,6 +56,11 @@ class FundManager:
         """
         analyze_summary = pd.read_excel(self.analyze_summary_file)
 
+        # # 读取交易 CSV 文件并转换交易日期为 datetime 类型
+        # transactions = pd.read_csv(csv_file_path, encoding='GBK')
+        # transactions = transactions[(transactions['用户名'] == '临时调拨') & (transactions['金额']<0)]
+        # transactions['交易日期'] = pd.to_datetime(transactions['交易日期'])
+
         for date in analyze_summary['交收日期'].unique():
             date = pd.to_datetime(date)
 
@@ -91,6 +73,12 @@ class FundManager:
             total_assets = guoxin_accounts['资产净值'].sum()
 
             self.daily_assets[date] = total_assets
+            # if (date in transactions['交易日期'].unique()):
+            #     for index, row in transactions[transactions['交易日期'] == date].iterrows():
+            #         self.daily_assets[date] -= row['金额']
+            #         print(f"{date} 回充 {row['用户名']} 金额 {row['金额']}")
+
+
 
     def calculate_user_balances(self, date):
         """
