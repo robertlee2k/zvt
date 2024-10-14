@@ -4,7 +4,6 @@ from gxTransData import SummaryClassifier, AccountSummary
 from gxTransHistory import StockTransHistory
 from datetime import datetime
 
-
 # 拆分逻辑：根据空格分隔拆分证券名称和证券代码
 def split_security(row):
     """
@@ -65,11 +64,13 @@ def analyze_transactions(start_date=None):
     # 如果当天没有交易，则将前一日的持仓和资金余额作为当天的持仓和资金余额。
     trade_dates = StockPriceHistory.load_trade_dates()
     if start_date is None:
-        start_date = data['交收日期'].min()
+        from_date = data['交收日期'].min()
+    else:
+        from_date = start_date
     # 获取今天的日期
-    today = datetime.today().date()
-    trade_dates = trade_dates[(trade_dates['trade_date'] >= pd.to_datetime(start_date)) & (
-            trade_dates['trade_date'] <= pd.to_datetime(today))]
+    until_date = datetime.today()
+    trade_dates = trade_dates[(trade_dates['trade_date'] >= pd.to_datetime(from_date)) & (
+            trade_dates['trade_date'] <= pd.to_datetime(until_date))]
 
     for trade_date in trade_dates['trade_date']:
         # copy一份作为新的交易日的空白记录，并初始化新的日期

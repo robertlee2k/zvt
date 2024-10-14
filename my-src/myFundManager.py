@@ -1,6 +1,4 @@
 import pandas as pd
-from datetime import datetime
-
 
 class FundManager:
     def __init__(self, initial_fund_total_assets, initial_fund_units, analyze_summary_file, start_date):

@@ -4,20 +4,15 @@
 # infos = get_account_info()
 # print(infos)
 
-from stockPriceHistory import  StockPriceHistory
-start_date='20160121'
-tradedates=StockPriceHistory.load_trade_dates()
-tradedates=tradedates[tradedates['trade_date']>=start_date]
-print(tradedates)
+
 #
-# import akshare as ak
-# stock_code='sh900932'
-# start_date='20160121'
-# end_date='20161231'
-# stock_hist_df = ak.stock_zh_b_daily(symbol=stock_code, start_date=start_date,
-#                                    end_date=end_date,adjust="")
-#
-# print(stock_hist_df)
+import akshare as ak
+stock_code='sh600060'
+start_date='20150615'
+end_date='20150730'
+stock_hist_df = ak.stock_zh_a_daily(symbol=stock_code, start_date=start_date,
+                                   end_date=end_date,adjust="")
+print(stock_hist_df)
 
 # fund_etf_hist_sina_df = ak.fund_etf_hist_sina(symbol="of150172")
 # print(fund_etf_hist_sina_df)

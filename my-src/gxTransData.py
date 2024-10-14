@@ -274,6 +274,18 @@ class AccountSummary:
             df_old_data['交收日期'] = pd.to_datetime(df_old_data['交收日期'])
             # 将数据df_new_data写入excel中的sheet表,从start_date之后的第一个行开始覆盖/追加写：
             skip_rows = df_old_data[df_old_data['交收日期'] < start_date].shape[0]
+
+            # 计算写入后的总行数
+            old_rows = len(df_old_data) + 1
+            total_rows = skip_rows + len(df_new_data) + 1  # 加1是因为表头
+            # 如果新写入后的行数小于旧表，则需要添加额外的空行占位
+            empty_rows = total_rows - old_rows
+            if empty_rows > 0:
+                # 创建一个新的Dataframe,里面有 empty_rows 行，每行都为空的
+                empty_df = pd.DataFrame(index=range(empty_rows), columns=df_new_data.columns)
+                df_new_data = pd.concat([df_new_data, empty_df])
+                print(f"新数据比旧数据少，需要为{sheet_name} 补充{empty_rows}行空行")
+
             df_new_data.to_excel(writer, sheet_name=sheet_name, startrow=skip_rows + 1, index=False, header=False)
         else:
             print(f"没有数据需要写入{sheet_name}，跳过")

@@ -56,7 +56,7 @@ class StockPriceHistory:
             prev_date_idx = stock_hold_df['交收日期'].sub(start_date).abs().idxmin()
             # 找到离 start_date 最近的交收日期(可以是当天）
             prev_date = stock_hold_df.loc[prev_date_idx]['交收日期']
-            print(f'最近持仓日期{prev_date}')
+            print(f'找到开始更新日期的最近持仓日期{prev_date}')
             stock_hold_df = stock_hold_df[stock_hold_df['交收日期'] >= prev_date]
             # 根据最接近的持仓股票的交收日期修改start_date（因为在下面的代码里这个日期如果小于start_date会被过滤掉）
             if prev_date < start_date:
@@ -361,6 +361,8 @@ def run_update_ak():
     if os.path.exists(ALL_STOCK_HIST_DF_PKL):
         all_stock_hist_df = stock_price.load_from_local(ALL_STOCK_HIST_DF_PKL)
         start_date = all_stock_hist_df['日期'].max()
+        # 将开始日期往前推两个月以预留缓冲时间
+        start_date -= pd.DateOffset(months=2)
 
     df, failed = stock_price.fetch_close_price_from_ak(start_date)
     print(df)
