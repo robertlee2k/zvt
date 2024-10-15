@@ -1,9 +1,11 @@
 import pandas as pd
 
+
 class FundManager:
     def __init__(self, initial_fund_total_assets, initial_fund_units, analyze_summary_file, start_date):
         self.fund_total_assets = initial_fund_total_assets  # 基金总资产
         self.fund_units = initial_fund_units  # 基金总份额
+        self.fund_reserve = 0.0  # 用于处理临时调拨
         self.fund_data_history = []  # 保存每日基金的历史记录
         self.user_units = {}  # 每个用户持有的基金份额
         self.analyze_summary_file = analyze_summary_file  # 分析报告文件路径
@@ -28,7 +30,9 @@ class FundManager:
         if last_fund_nav == 0:
             raise ValueError(f"{date} 无法处理交易，上一交易日基金净值为0")
 
-        if user_id != "临时调拨":   # 忽略内部临时调拨
+        if user_id == "临时调拨":   # 忽略短时间的银证转账
+            self.fund_reserve -= amount  # 开辟一个临时调拨账户，用于处理临时调拨
+        else:
             units_change = int(amount / last_fund_nav)  # 计算份额变化，取整
 
             if user_id not in self.user_units:
@@ -91,22 +95,22 @@ class FundManager:
 
         for user_id, units in self.user_units.items():
             user_balance = round(units * nav, 2)  # 用户资产余额，保留两位小数
-            ownership = round((user_balance / total_assets) * 100, 2) if total_assets > 0 else 0  # 用户的基金占比，百分数表示且保留两位小数
+            ownership = round((user_balance / total_assets), 4) if total_assets > 0 else 0  # 用户的基金占比，百分数表示且保留两位小数
             balances.append({
-                'Date': date.strftime('%Y-%m-%d'),  # 输出仅有日期
-                'User': user_id,
-                'Units': f"{units:,}",  # 份额带有逗号分隔，不带小数
-                'Balance': f"{user_balance:,.2f}",  # 资产净值带逗号分隔，保留两位小数
-                'Ownership Percentage': f"{ownership}%",  # 百分比，保留两位小数
-                'Fund NAV': f"{nav:,.2f}"  # 基金净值，带逗号分隔，保留两位小数
+                '日期': date.strftime('%Y-%m-%d'),  # 输出仅有日期
+                '用户': user_id,
+                '持有份额': units,  # 份额
+                '资产价值': user_balance,  # 资产净值
+                '份额占比': ownership,  # 百分比
+                '基金净值': nav,  # 基金净值
             })
 
         # 添加当天的基金状态到历史记录
         self.fund_data_history.append({
-            'Date': date.strftime('%Y-%m-%d'),
-            'Fund Total Units': f"{self.fund_units:,}",
-            'Fund Total Assets': f"{self.fund_total_assets:,.2f}",
-            'Fund NAV': f"{nav:,.2f}"
+            '日期': date.strftime('%Y-%m-%d'),
+            '基金总份额': self.fund_units,
+            '基金总资产': self.fund_total_assets,
+            '基金净值': nav
         })
 
         return balances
@@ -137,36 +141,80 @@ class FundManager:
                 base_date = unique_dates[0]
 
             # 在变更当日数据之前，计算存储前一天的基金净值，用于计算申购赎回的净值基础
-            last_fund_assets = self.daily_assets[base_date]
+            last_fund_assets = self.daily_assets[base_date] + self.fund_reserve
             last_fund_units = self.fund_units
-            # 更新当天的基金资产
-            self.fund_total_assets = self.daily_assets[unique_dates[i]]
 
             # 筛选出当天的所有交易
             daily_transactions = transactions[transactions['交易日期'] == date]
 
             # 合并同一用户的所有交易
-            aggregated_transactions = daily_transactions.groupby('用户名')['金额'].sum().reset_index()
+            aggregated_transactions = daily_transactions.groupby('用户名')['申购金额'].sum().reset_index()
 
             # 处理合并后的每个用户的交易
             for _, transaction in aggregated_transactions.iterrows():
                 user_id = transaction['用户名']
-                amount = transaction['金额']
+                amount = transaction['申购金额']
                 if amount != 0:
                     self.process_transaction(user_id=user_id, amount=amount, date=date, last_fund_assets=last_fund_assets, last_fund_units=last_fund_units)
+
+            # 更新当天的基金资产
+            self.fund_total_assets = self.daily_assets[unique_dates[i]] + self.fund_reserve
 
             # 计算当天每个用户的资产余额和占比
             daily_balances = self.calculate_user_balances(date)
             # 将当天的结果添加到总记录中
             all_balances = pd.concat([all_balances, pd.DataFrame(daily_balances)], ignore_index=True)
 
+        if self.fund_reserve != 0:
+            print(f"ERROR! 基金临时调拨账户未平账，有剩余金额：{self.fund_reserve:,.2f}")
+
         # 将基金历史数据转换为 DataFrame
         fund_assets_report = pd.DataFrame(self.fund_data_history)
+        # 设置数据类型
+        all_balances['持有份额'] = all_balances['持有份额'].astype(float)
+        all_balances['资产价值'] = all_balances['资产价值'].astype(float)
+        all_balances['份额占比'] = all_balances['份额占比'].astype(float)
+        all_balances['基金净值'] = all_balances['基金净值'].astype(float)
+
+        # 设置基金历史数据的数据类型
+        fund_assets_report['基金总份额'] = fund_assets_report['基金总份额'].astype(float)
+        fund_assets_report['基金总资产'] = fund_assets_report['基金总资产'].astype(float)
+        fund_assets_report['基金净值'] = fund_assets_report['基金净值'].astype(float)
 
         # 使用 ExcelWriter 输出多个 sheet
         with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
-            all_balances.to_excel(writer, sheet_name='Fund Balances', index=False)
+            # 设置数值格式
+            workbook = writer.book
+            number_format = workbook.add_format({'num_format': '#,##0'})  # 整数格式
+            float_format = workbook.add_format({'num_format': '#,##0.00'}) # 小数格式
+            percent_format = workbook.add_format({'num_format': '0.00%'})  # 百分比格式
+
+            # 输出用户余额表
+            all_balances.to_excel(writer, sheet_name='基金用户明细', index=False)
+
+            worksheet_balances = writer.sheets['基金用户明细']
+            # 设置列宽
+            for idx, column in enumerate(all_balances.columns):
+                max_len = max(all_balances[column].astype(str).map(len).max(), len(column)) + 5
+                worksheet_balances.set_column(idx, idx, max_len)
+            worksheet_balances.set_column('C:C', None, number_format)  # 设置持有份额为整数格式
+            worksheet_balances.set_column('D:D', None, number_format)  # 设置资产价值为整数格式
+            worksheet_balances.set_column('E:E', None, percent_format)  # 设置份额占比为百分比格式
+            worksheet_balances.set_column('F:F', None, float_format)  # 设置基金净值为数值格式
+
+
+            # 输出基金资产表
             fund_assets_report.to_excel(writer, sheet_name='基金资产净值', index=False)
+            worksheet_assets = writer.sheets['基金资产净值']
+            # 设置列宽
+            for idx, column in enumerate(fund_assets_report.columns):
+                max_len = max(fund_assets_report[column].astype(str).map(len).max(), len(column)) + 5
+                worksheet_assets.set_column(idx, idx, max_len)
+
+            worksheet_assets.set_column('B:B', None, number_format)  # 设置基金总份额为整数格式
+            worksheet_assets.set_column('C:C', None, number_format)  # 设置基金总资产为数值格式
+            worksheet_assets.set_column('D:D', None, float_format)  # 设置基金净值为数值格式
+
 
         print(f"每日资产余额及基金占比已输出至 {output_file}")
 
