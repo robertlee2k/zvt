@@ -23,14 +23,16 @@ class FundManager:
         """
         处理用户申购或赎回请求
         :param user_id: 用户ID
-        :param amount: 交易金额（正值为申购，负值为赎回）
+        :param amount: 交易金额
         :param date: 交易日期
+        :param last_fund_assets: 上一次基金的总资产值
+        :param last_fund_units: 上一次基金的单位数
         """
-        last_fund_nav = last_fund_assets/last_fund_units
+        last_fund_nav = last_fund_assets / last_fund_units
         if last_fund_nav == 0:
             raise ValueError(f"{date} 无法处理交易，上一交易日基金净值为0")
 
-        if user_id == "临时调拨":   # 忽略短时间的银证转账
+        if user_id == "临时调拨":  # 忽略短时间的银证转账
             self.fund_reserve -= amount  # 开辟一个临时调拨账户，用于处理临时调拨
         else:
             units_change = int(amount / last_fund_nav)  # 计算份额变化，取整
@@ -41,7 +43,8 @@ class FundManager:
             if units_change < 0 and self.user_units[user_id] + units_change < 0:
                 # 用户份额不足的情况下，将差额由“波”来承担
                 shortfall = abs(self.user_units[user_id] + units_change)
-                print(f"{date} 用户 {user_id} 的份额 {self.user_units[user_id]} 不足，差额由 '波' 承担 {shortfall} 份 * 前日净值 {last_fund_nav}")
+                print(
+                    f"{date} 用户 {user_id} 的份额 {self.user_units[user_id]} 不足，差额由 '波' 承担 {shortfall} 份 * 前日净值 {last_fund_nav}")
 
                 # 先用该用户的剩余份额进行交易，然后由“波”承担剩余部分
                 self.user_units[user_id] = 0
@@ -52,7 +55,6 @@ class FundManager:
             if self.user_units[user_id] == 0:
                 del self.user_units[user_id]
             self.fund_units += units_change  # 更新基金总份额
-
 
     def calculate_daily_assets(self):
         """
@@ -81,8 +83,6 @@ class FundManager:
             #     for index, row in transactions[transactions['交易日期'] == date].iterrows():
             #         self.daily_assets[date] -= row['金额']
             #         print(f"{date} 回充 {row['用户名']} 金额 {row['金额']}")
-
-
 
     def calculate_user_balances(self, date):
         """
@@ -155,7 +155,8 @@ class FundManager:
                 user_id = transaction['用户名']
                 amount = transaction['申购金额']
                 if amount != 0:
-                    self.process_transaction(user_id=user_id, amount=amount, date=date, last_fund_assets=last_fund_assets, last_fund_units=last_fund_units)
+                    self.process_transaction(user_id=user_id, amount=amount, date=date,
+                                             last_fund_assets=last_fund_assets, last_fund_units=last_fund_units)
 
             # 更新当天的基金资产
             self.fund_total_assets = self.daily_assets[unique_dates[i]] + self.fund_reserve
@@ -186,7 +187,7 @@ class FundManager:
             # 设置数值格式
             workbook = writer.book
             number_format = workbook.add_format({'num_format': '#,##0'})  # 整数格式
-            float_format = workbook.add_format({'num_format': '#,##0.00'}) # 小数格式
+            float_format = workbook.add_format({'num_format': '#,##0.00'})  # 小数格式
             percent_format = workbook.add_format({'num_format': '0.00%'})  # 百分比格式
 
             # 输出用户余额表
@@ -195,26 +196,24 @@ class FundManager:
             worksheet_balances = writer.sheets['基金用户明细']
             # 设置列宽
             for idx, column in enumerate(all_balances.columns):
-                max_len = max(all_balances[column].astype(str).map(len).max(), len(column)) + 5
+                max_len = max(all_balances[column].astype(str).map(len).max(), len(column)) + 8
                 worksheet_balances.set_column(idx, idx, max_len)
             worksheet_balances.set_column('C:C', None, number_format)  # 设置持有份额为整数格式
             worksheet_balances.set_column('D:D', None, number_format)  # 设置资产价值为整数格式
             worksheet_balances.set_column('E:E', None, percent_format)  # 设置份额占比为百分比格式
             worksheet_balances.set_column('F:F', None, float_format)  # 设置基金净值为数值格式
 
-
             # 输出基金资产表
             fund_assets_report.to_excel(writer, sheet_name='基金资产净值', index=False)
             worksheet_assets = writer.sheets['基金资产净值']
             # 设置列宽
             for idx, column in enumerate(fund_assets_report.columns):
-                max_len = max(fund_assets_report[column].astype(str).map(len).max(), len(column)) + 5
+                max_len = max(fund_assets_report[column].astype(str).map(len).max(), len(column)) + 8
                 worksheet_assets.set_column(idx, idx, max_len)
 
             worksheet_assets.set_column('B:B', None, number_format)  # 设置基金总份额为整数格式
             worksheet_assets.set_column('C:C', None, number_format)  # 设置基金总资产为数值格式
             worksheet_assets.set_column('D:D', None, float_format)  # 设置基金净值为数值格式
-
 
         print(f"每日资产余额及基金占比已输出至 {output_file}")
 
