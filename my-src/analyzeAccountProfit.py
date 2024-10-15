@@ -181,6 +181,7 @@ def visualize_profit(df_total_profit):
     # 计算每日盈利
     df_daily_profit = df_total_profit['盈亏'].diff()
     df_daily_profit = pd.DataFrame({'交收日期': df_total_profit['交收日期'], '盈亏': df_daily_profit})
+    df_daily_profit.fillna(0)
 
     plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
     plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
@@ -306,14 +307,11 @@ def get_sim_account_history(checkpoint_date):
 def get_trade_dates(start_date):
     # 获取当前日期
     today = datetime.date.today()
-    # 生成日期序列
-    date_range = pd.date_range(start=start_date, end=today, freq='D')
     # 获取所有的交易日日期
     trade_dates = StockPriceHistory.load_trade_dates()
-    trade_dates = trade_dates[trade_dates['trade_date'] > start_date]
-    # 使用isin()方法过滤日期
-    filtered_dates = date_range[date_range.isin(trade_dates['trade_date'])]
-    return filtered_dates
+    # 筛选出指定范围内的交易日
+    filtered_dates = trade_dates[(trade_dates['trade_date'] >= start_date) & (trade_dates['trade_date'] <= today)]
+    return filtered_dates['trade_date']
 
 
 def run():

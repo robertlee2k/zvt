@@ -208,6 +208,11 @@ def analyze_transactions(start_date=None):
                     # 计算当天融资账户借款余额
                     if summary in SummaryClassifier.RONGZI_CASHFLOW_SUMMARY:
                         today_balance.loc[balance_index, '融资借款'] += trade_amount
+                        if summary == '融入购回减资金':
+                            # 因为融入方初始交易 和 融入购回减资金 结对时会多还资金（融资利息），所以如果为负了，则置为0
+                            lend_value = today_balance.loc[balance_index, '融资借款'].values[0]
+                            if lend_value < 0:
+                                today_balance.loc[balance_index, '融资借款'] = 0
 
                     # 计算当天被冻结的资金余额
                     if summary in SummaryClassifier.FROZEN_CASHFLOW_SUMMARY:

@@ -110,9 +110,10 @@ class FundManager:
                 '日期': date.strftime('%Y-%m-%d'),  # 输出仅有日期
                 '用户': user_id,
                 '持有份额': units,  # 份额
-                '资产价值': user_balance,  # 资产净值
                 '用户成本': cost_base,  # 新增：用户成本基
                 '份额占比': ownership,  # 百分比
+                '资产价值': user_balance,  # 资产净值
+                '用户利润': user_balance - cost_base,  # 浮盈
                 '基金净值': nav,  # 基金净值
             })
 
@@ -121,8 +122,9 @@ class FundManager:
         self.fund_data_history.append({
             '日期': date.strftime('%Y-%m-%d'),
             '基金总份额': self.fund_units,
-            '基金总资产': self.fund_total_assets,
             '基金总成本': total_cost_base,
+            '基金总资产': self.fund_total_assets,
+            '基金总利润': self.fund_total_assets-total_cost_base,
             '基金净值': nav
         })
 
@@ -190,21 +192,24 @@ class FundManager:
         if self.fund_reserve != 0:
             print(f"ERROR! 基金临时调拨账户未平账，有剩余金额：{self.fund_reserve:,.2f}")
 
+        self.output_excel(all_balances, output_file)
+
+    def output_excel(self, all_balances, output_file):
         # 将基金历史数据转换为 DataFrame
         fund_assets_report = pd.DataFrame(self.fund_data_history)
         # 设置数据类型
         all_balances['持有份额'] = all_balances['持有份额'].astype(float)
-        all_balances['资产价值'] = all_balances['资产价值'].astype(float)
         all_balances['用户成本'] = all_balances['用户成本'].astype(float)
         all_balances['份额占比'] = all_balances['份额占比'].astype(float)
+        all_balances['资产价值'] = all_balances['资产价值'].astype(float)
+        all_balances['用户利润'] = all_balances['用户利润'].astype(float)
         all_balances['基金净值'] = all_balances['基金净值'].astype(float)
-
         # 设置基金历史数据的数据类型
         fund_assets_report['基金总份额'] = fund_assets_report['基金总份额'].astype(float)
-        fund_assets_report['基金总资产'] = fund_assets_report['基金总资产'].astype(float)
         fund_assets_report['基金总成本'] = fund_assets_report['基金总成本'].astype(float)
+        fund_assets_report['基金总资产'] = fund_assets_report['基金总资产'].astype(float)
+        fund_assets_report['基金总利润'] = fund_assets_report['基金总利润'].astype(float)
         fund_assets_report['基金净值'] = fund_assets_report['基金净值'].astype(float)
-
         # 使用 ExcelWriter 输出多个 sheet
         with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
             # 设置数值格式
@@ -222,10 +227,13 @@ class FundManager:
                 max_len = max(all_balances[column].astype(str).map(len).max(), len(column)) + 8
                 worksheet_balances.set_column(idx, idx, max_len)
             worksheet_balances.set_column('C:C', None, number_format)  # 设置持有份额为整数格式
-            worksheet_balances.set_column('D:D', None, number_format)  # 设置资产价值为整数格式
-            worksheet_balances.set_column('E:E', None, number_format)
-            worksheet_balances.set_column('F:F', None, percent_format)  # 设置份额占比为百分比格式
-            worksheet_balances.set_column('G:G', None, float_format)  # 设置基金净值为数值格式
+            worksheet_balances.set_column('D:D', None, number_format)  # 设置用户成本为整数格式
+            worksheet_balances.set_column('E:E', None, percent_format)  # 设置份额占比为百分比格式
+            worksheet_balances.set_column('F:F', None, number_format)  # 设置用户利润为整数格式
+            worksheet_balances.set_column('G:G', None, number_format)  # 设置资产价值为整数格式
+            worksheet_balances.set_column('H:H', None, float_format)
+
+            # 设置基金净值为数值格式
 
             # 输出基金资产表
             fund_assets_report.to_excel(writer, sheet_name='基金资产净值', index=False)
@@ -238,8 +246,8 @@ class FundManager:
             worksheet_assets.set_column('B:B', None, number_format)  # 设置基金总份额为整数格式
             worksheet_assets.set_column('C:C', None, number_format)  # 设置基金总资产为数值格式
             worksheet_assets.set_column('D:D', None, number_format)
+            worksheet_assets.set_column('E:E', None, number_format)
             worksheet_assets.set_column('F:F', None, float_format)  # 设置基金净值为数值格式
-
         print(f"每日资产余额及基金占比已输出至 {output_file}")
 
 
@@ -249,7 +257,7 @@ summary_file = 'analyze_summary.xlsx'
 # base_assets = 2203414.09
 base_date = '2014-12-01'
 base_assets = 2516456.67 # 市值
-base_cost = 1500000   # 成本
+base_cost = base_assets - 1378142.7   # 成本
 base_units = round(base_assets, 0)
 
 
