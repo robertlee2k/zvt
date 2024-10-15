@@ -48,7 +48,7 @@ class FundManager:
 
                 # 先用该用户的剩余份额进行交易，然后由“波”承担剩余部分
                 self.user_units[user_id] = 0
-                self.user_units["波"] += units_change + shortfall  # “波”承担不足的份额
+                self.user_units["波"] += shortfall  # “波”承担不足的份额
             else:
                 self.user_units[user_id] += units_change  # 更新用户份额
 
