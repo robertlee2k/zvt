@@ -2,7 +2,7 @@ import pandas as pd
 
 
 class FundManager:
-    def __init__(self, initial_fund_total_assets, initial_fund_units, analyze_summary_file, start_date):
+    def __init__(self, initial_fund_total_assets, initial_fund_units, initial_cost,analyze_summary_file, start_date):
         self.fund_total_assets = initial_fund_total_assets  # 基金总资产
         self.fund_units = initial_fund_units  # 基金总份额
         self.fund_reserve = 0.0  # 用于处理临时调拨
@@ -14,7 +14,7 @@ class FundManager:
         self.user_units = {}  # 每个用户持有的基金份额
         self.user_cost_bases = {}  # 每个用户的成本金额
         self.user_units["波"] = initial_fund_units  # 默认份额都属于波
-        self.user_cost_bases["波"] = initial_fund_total_assets  # 默认份额都属于波
+        self.user_cost_bases["波"] = initial_cost  # 默成本都属于波
 
     def get_nav(self):
         """计算基金净值: 基金总资产 / 基金总份额"""
@@ -22,11 +22,12 @@ class FundManager:
             return 0
         return self.fund_total_assets / self.fund_units
 
-    def process_transaction(self, user_id, amount, date, last_fund_assets, last_fund_units):
+    def process_transaction(self, user_id,  amount, actual_paid, date, last_fund_assets, last_fund_units):
         """
         处理用户申购或赎回请求
         :param user_id: 用户ID
-        :param amount: 交易金额
+        :param amount: 申购金额，用于计算份额
+        :param actual_paid:  用户实际支付金额（多数情况下等于申购金额），用于计算成本
         :param date: 交易日期
         :param last_fund_assets: 上一次基金的总资产值
         :param last_fund_units: 上一次基金的单位数
@@ -53,17 +54,18 @@ class FundManager:
                     f"{date} 用户 {user_id} 的份额 {self.user_units[user_id]} 不足，差额由 '波' 承担 {shortfall} 份 * 前日净值 {last_fund_nav}")
 
                 # 先用该用户的剩余份额进行交易，然后由“波”承担剩余部分
-                self.user_cost_bases[user_id] -= self.user_units[user_id]*last_fund_nav
+                self.user_cost_bases[user_id] -= actual_paid # 此处用户，获得资金，减了成本
                 self.user_units[user_id] = 0
 
                 # 多余的成本基由“波”承担
-                self.user_cost_bases["波"] -= shortfall*last_fund_nav  # “波”承担不足份额的成本
-                self.user_units["波"] += shortfall  # “波”承担不足的份额
+                # self.user_cost_bases["波"] += shortfall*last_fund_nav
+                # “波”承担不足份额卖出，但卖出的钱不在波处，此处“波”成本不变
+                self.user_units["波"] -= shortfall  # “波”承担不足的份额，“波”减去了份额,但没有获得资金，不减成本
 
             else:
                 self.user_units[user_id] += units_change  # 更新用户份额
                 # 更新用户的成本基
-                self.user_cost_bases[user_id] -= amount
+                self.user_cost_bases[user_id] += actual_paid
 
             if self.user_units[user_id] == 0:
                 del self.user_units[user_id]
@@ -161,15 +163,20 @@ class FundManager:
             # 筛选出当天的所有交易
             daily_transactions = transactions[transactions['交易日期'] == date]
 
-            # 合并同一用户的所有交易
-            aggregated_transactions = daily_transactions.groupby('用户名')['申购金额'].sum().reset_index()
+            # 合并同一用户的所有交易，并计算申购金额和用户成本的总和
+            aggregated_transactions = (
+                daily_transactions.groupby('用户名')
+                .agg({'申购金额': 'sum', '实际支付金额': 'sum'})
+                .reset_index()
+            )
 
             # 处理合并后的每个用户的交易
             for _, transaction in aggregated_transactions.iterrows():
                 user_id = transaction['用户名']
                 amount = transaction['申购金额']
+                actual_paid = transaction['实际支付金额']
                 if amount != 0:
-                    self.process_transaction(user_id=user_id, amount=amount, date=date,
+                    self.process_transaction(user_id=user_id, amount=amount, actual_paid=actual_paid, date=date,
                                              last_fund_assets=last_fund_assets, last_fund_units=last_fund_units)
 
             # 更新当天的基金资产
@@ -241,11 +248,12 @@ summary_file = 'analyze_summary.xlsx'
 # base_date = '2015-07-01'
 # base_assets = 2203414.09
 base_date = '2014-12-01'
-base_assets = 2516456.67
+base_assets = 2516456.67 # 市值
+base_cost = 1500000   # 成本
 base_units = round(base_assets, 0)
 
 
-fund = FundManager(initial_fund_total_assets=base_assets, initial_fund_units=base_units,
+fund = FundManager(initial_fund_total_assets=base_assets, initial_fund_units=base_units, initial_cost=base_cost,
                    analyze_summary_file=summary_file, start_date=base_date)
 
 csv_file_path = 'stock/fund_cashflow.csv'
