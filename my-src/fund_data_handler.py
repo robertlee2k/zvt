@@ -2,6 +2,7 @@ from datetime import datetime
 
 import akshare as ak
 import pandas as pd
+from akshare import stock_hk_hist
 
 
 class FundDataHandler:
@@ -13,6 +14,17 @@ class FundDataHandler:
         '150204', '150206', '150210', '150218', '150222', '150231', '150235', '502008', '161024'
     ]
 
+    # 定义港股指数（新浪行情的指数）
+    HK_INDEXES = [
+        'CSI300',  # 沪深300指数
+        'HSI',  # 恒生指数
+        'HSTECH',  # 恒生科技指数
+        'SSE180',  # 上证180指数
+        'SSE50',  # 上证50指数
+        'SSECOMP',  # 上证综合指数
+        'SSEDIV'  # 上证红利指数
+    ]
+
     @staticmethod
     def is_etf_fund(code):
         return code in FundDataHandler.ETF_FUNDS
@@ -20,6 +32,10 @@ class FundDataHandler:
     @staticmethod
     def is_grade_fund(code):
         return code in FundDataHandler.GRADE_FUNDS
+
+    @staticmethod
+    def is_hk_index(code):
+        return code in FundDataHandler.HK_INDEXES
 
     def __init__(self):
         self.fund_codes = FundDataHandler.GRADE_FUNDS.copy()
@@ -90,6 +106,17 @@ class FundDataHandler:
     def etf_fund_hist(stock_code: str, start_date: str, end_date: str):
         stock_hist_df = ak.fund_etf_fund_info_em(fund=stock_code, start_date=start_date, end_date=end_date)
         stock_hist_df.rename(columns={'净值日期': '日期', '单位净值': '收盘'}, inplace=True)
+        stock_hist_df = stock_hist_df[['日期', '收盘']]
+        return stock_hist_df
+
+    @staticmethod
+    def hk_index_hist(symbol: str, start_date: str, end_date: str):
+        start_date =pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+        stock_hist_df = ak.stock_hk_index_daily_sina(symbol=symbol)
+        stock_hist_df.rename(columns={'date': '日期', 'close': '收盘'}, inplace=True)
+        stock_hist_df['日期'] = pd.to_datetime(stock_hist_df['日期'])
+        stock_hist_df = stock_hist_df[(stock_hist_df['日期'] >= start_date) & (stock_hist_df['日期']<=end_date)]
         stock_hist_df = stock_hist_df[['日期', '收盘']]
         return stock_hist_df
 

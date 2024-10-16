@@ -226,6 +226,9 @@ class StockPriceHistory:
                 stock_hist_df['收盘'] = stock_hist_df['收盘'] * stock_hist_df['卖出结算汇兑比率']
                 stock_hist_df = stock_hist_df[['日期', '收盘']]
                 # .drop(['买入结算汇兑比率','卖出结算汇兑比率','货币种类'], axis=1, inplace=True)
+            elif market == '香港指数':
+                stock_hist_df = FundDataHandler.hk_index_hist(symbol= stock_code, start_date=start_date,
+                                                              end_date=end_date)
             elif market == 'A股新股':
                 ignore = True  # ignore 新股
         except Exception as e:
@@ -261,6 +264,8 @@ class StockPriceHistory:
             return 'ETF基金'
         if FundDataHandler.is_grade_fund(code):
             return '分级基金'
+        if FundDataHandler.is_hk_index(code):
+            return '香港指数'
 
         if len(code) < 5:
             return '未知类型'
@@ -288,7 +293,7 @@ class StockPriceHistory:
             try:
                 if market == '上海A股':
                     df_hfq_factors = ak.stock_zh_a_daily(symbol='sh' + stock_code, adjust=AK_ADJUST_HFQ)
-                if market == '深圳A股':
+                elif market == '深圳A股':
                     df_hfq_factors = ak.stock_zh_a_daily(symbol='sz' + stock_code, adjust=AK_ADJUST_HFQ)
                 elif market == 'B股股票':
                     df_hfq_factors = ak.stock_zh_b_daily(symbol='sh' + stock_code, adjust=AK_ADJUST_HFQ)
@@ -333,7 +338,7 @@ class StockPriceHistory:
         stock_sgt_settlement_exchange_rate_sse_df.rename(columns={'适用日期': '日期'}, inplace=True)
         stock_sgt_settlement_exchange_rate_sse_df['日期'] = pd.to_datetime(
             stock_sgt_settlement_exchange_rate_sse_df['日期'])
-        print(stock_sgt_settlement_exchange_rate_sse_df)
+        # print(stock_sgt_settlement_exchange_rate_sse_df)
         stock_sgt_settlement_exchange_rate_sse_df.to_pickle(HGT_EXCHANGE_RATE_FILE)
         return stock_sgt_settlement_exchange_rate_sse_df
 
